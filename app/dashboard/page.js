@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import Breadcrumb from "@/components/Breadcrumb";
 import { FaDownload, FaEdit, FaPlusCircle, FaTable, FaTrashAlt, FaTachometerAlt, FaUsers, FaUserShield } from "react-icons/fa";
 import PasswordField from "@/components/PasswordField";
+import toast from "react-hot-toast";
 
 function KeyValue({ label, value }) {
   return (
@@ -18,6 +19,12 @@ function KeyValue({ label, value }) {
 function ImageThumb({ src, alt }) {
   if (!src) return <span>-</span>;
   return <img className="table-image" src={src} alt={alt} />;
+}
+
+function getPaymentStatus(paymentRef) {
+  if (!paymentRef) return "PENDING";
+  if (paymentRef === "ADMIN_CREATED") return "ADMIN_CREATED";
+  return "PAID";
 }
 
 function fileToDataUrl(file) {
@@ -47,6 +54,13 @@ export default function DashboardPage() {
   const [editId, setEditId] = useState("");
   const [editDraft, setEditDraft] = useState({});
 
+  useEffect(() => {
+    if (!message) return;
+    const lowered = String(message).toLowerCase();
+    const isSuccess = lowered.includes("success") || lowered.includes("updated") || lowered.includes("created") || lowered.includes("deleted") || lowered.includes("downloaded") || lowered.includes("completed");
+    if (isSuccess) toast.success(message);
+    else toast.error(message);
+  }, [message]);
   useEffect(() => {
     refresh(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,6 +164,7 @@ export default function DashboardPage() {
       "village",
       "feePaid",
       "paymentRef",
+      "paymentStatus",
       "registeredAt"
     ];
 
@@ -170,6 +185,7 @@ export default function DashboardPage() {
         player.village,
         player.feePaid,
         player.paymentRef,
+        getPaymentStatus(player.paymentRef),
         player.registeredAt
       ].map(escapeCsv).join(",")
     );
@@ -314,7 +330,7 @@ export default function DashboardPage() {
               <p className="muted">Logged in as ID: {currentUser.id}</p>
             </div>
           </div>
-          {message ? <p className="message">{message}</p> : null}
+          
         </section>
 
         {currentUser.role === "super_admin" ? (
@@ -449,13 +465,13 @@ export default function DashboardPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Name</th><th>Person ID</th><th>Email</th><th>Photo</th><th>Mobile</th><th>Jersey Size</th><th>Jersey Name</th><th>Village</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
+                      <th>Name</th><th>Person ID</th><th>Email</th><th>Photo</th><th>Mobile</th><th>Jersey Size</th><th>Jersey Name</th><th>Village</th><th>Fee</th><th>Payment Ref</th><th>Payment Status</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {players.map((p) => (
                       <tr key={p.id}>
-                        <td>{p.name}</td><td>{p.personId || "-"}</td><td>{p.email || "-"}</td><td><ImageThumb src={p.photo} alt={`${p.name} photo`} /></td><td>{p.mobile}</td><td>{p.jerseySize}</td><td>{p.jerseyName}</td><td>{p.village}</td><td>{p.feePaid}</td><td>{p.paymentRef}</td>
+                        <td>{p.name}</td><td>{p.personId || "-"}</td><td>{p.email || "-"}</td><td><ImageThumb src={p.photo} alt={`${p.name} photo`} /></td><td>{p.mobile}</td><td>{p.jerseySize}</td><td>{p.jerseyName}</td><td>{p.village}</td><td>{p.feePaid}</td><td>{p.paymentRef}</td><td>{getPaymentStatus(p.paymentRef)}</td>
                         <td className="actions-cell">
                           <button className="btn mini" onClick={() => startEdit("player", p)}><FaEdit aria-hidden="true" /> <span>Edit</span></button>
                           <button className="btn mini danger" onClick={() => remove("player", p.id)}><FaTrashAlt aria-hidden="true" /> <span>Delete</span></button>
@@ -632,5 +648,12 @@ export default function DashboardPage() {
     </main>
   );
 }
+
+
+
+
+
+
+
 
 

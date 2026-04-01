@@ -3,18 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FaKey, FaSignInAlt, FaUserAlt } from "react-icons/fa";
+import toast from "react-hot-toast";
 import AppHeader from "@/components/AppHeader";
 import Breadcrumb from "@/components/Breadcrumb";
 import PasswordField from "@/components/PasswordField";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function login(event) {
     event.preventDefault();
-    setMessage("");
     setLoading(true);
 
     try {
@@ -33,19 +32,21 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setMessage(data.error || "Login failed.");
+        toast.error(data.error || "Login failed.");
         return;
       }
 
       if (data.requiresRoleSelection) {
         sessionStorage.setItem("kmpl_pending_roles", JSON.stringify(data.choices || []));
+        toast.success("Select your role to continue.");
         router.push("/select-role");
         return;
       }
 
+      toast.success("Login successful.");
       router.push("/dashboard");
     } catch (error) {
-      setMessage(error.message || "Login failed.");
+      toast.error(error.message || "Login failed.");
     } finally {
       setLoading(false);
     }
@@ -87,7 +88,6 @@ export default function LoginPage() {
               <span>{loading ? "Please wait..." : "Login"}</span>
             </button>
           </form>
-          {message ? <p className="message">{message}</p> : null}
         </section>
       </div>
     </main>

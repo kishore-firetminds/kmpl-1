@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import AppHeader from "@/components/AppHeader";
 import Breadcrumb from "@/components/Breadcrumb";
 
 export default function SelectRolePage() {
   const router = useRouter();
   const [choices, setChoices] = useState([]);
-  const [message, setMessage] = useState("");
 
   useEffect(() => {
     const raw = sessionStorage.getItem("kmpl_pending_roles");
@@ -21,7 +21,6 @@ export default function SelectRolePage() {
   }, [router]);
 
   async function continueAs(choice) {
-    setMessage("");
     const response = await fetch("/api/auth/select-role", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -30,11 +29,12 @@ export default function SelectRolePage() {
 
     const data = await response.json();
     if (!response.ok) {
-      setMessage(data.error || "Unable to continue.");
+      toast.error(data.error || "Unable to continue.");
       return;
     }
 
     sessionStorage.removeItem("kmpl_pending_roles");
+    toast.success("Role selected.");
     router.push("/dashboard");
   }
 
@@ -65,7 +65,6 @@ export default function SelectRolePage() {
               </button>
             ))}
           </div>
-          {message ? <p className="message">{message}</p> : null}
         </section>
       </div>
     </main>
