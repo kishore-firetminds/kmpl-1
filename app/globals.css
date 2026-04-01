@@ -667,3 +667,20 @@ td {
 
 
 
+
+.app-footer {
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.9);
+  margin-top: 16px;
+}
+
+.app-footer .container {
+  padding: 14px 0 22px;
+}
+
+.app-footer p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}

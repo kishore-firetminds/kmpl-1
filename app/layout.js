@@ -1,4 +1,5 @@
 import "./globals.css";
+import AppFooter from "@/components/AppFooter";
 
 export const metadata = {
   title: "KMPL Season-1",
@@ -8,7 +9,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <AppFooter />
+      </body>
     </html>
   );
 }
