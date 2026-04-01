@@ -87,7 +87,6 @@ export default function LoginPage() {
               <span>{loading ? "Please wait..." : "Login"}</span>
             </button>
           </form>
-          <p className="muted">Default super admin: 7981067942 / Admin@123</p>
           {message ? <p className="message">{message}</p> : null}
         </section>
       </div>
