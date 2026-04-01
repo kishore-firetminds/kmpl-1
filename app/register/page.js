@@ -247,7 +247,7 @@ export default function RegisterPage() {
         <section className="card">
           <h2 className="section-title">
             <FaUsers aria-hidden="true" />
-            <span>Register for KMPL Season-1</span>
+            <span>Register for KMPL Mangegaaru Premier League Season-1</span>
           </h2>
 
           <div className="switch-row">
