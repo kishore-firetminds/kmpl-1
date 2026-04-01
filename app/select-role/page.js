@@ -4,18 +4,15 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import Breadcrumb from "@/components/Breadcrumb";
-import {
-  clearPendingRoleChoices,
-  getPendingRoleChoices,
-  setCurrentUser
-} from "@/lib/storage";
 
 export default function SelectRolePage() {
   const router = useRouter();
   const [choices, setChoices] = useState([]);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const pending = getPendingRoleChoices();
+    const raw = sessionStorage.getItem("kmpl_pending_roles");
+    const pending = raw ? JSON.parse(raw) : [];
     if (!pending.length) {
       router.push("/login");
       return;
@@ -23,9 +20,21 @@ export default function SelectRolePage() {
     setChoices(pending);
   }, [router]);
 
-  function continueAs(choice) {
-    setCurrentUser({ id: choice.id, role: choice.role, personId: choice.personId });
-    clearPendingRoleChoices();
+  async function continueAs(choice) {
+    setMessage("");
+    const response = await fetch("/api/auth/select-role", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: choice.id, role: choice.role })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      setMessage(data.error || "Unable to continue.");
+      return;
+    }
+
+    sessionStorage.removeItem("kmpl_pending_roles");
     router.push("/dashboard");
   }
 
@@ -56,6 +65,7 @@ export default function SelectRolePage() {
               </button>
             ))}
           </div>
+          {message ? <p className="message">{message}</p> : null}
         </section>
       </div>
     </main>

@@ -2,17 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  FaCheckCircle,
+  FaCreditCard,
+  FaEnvelope,
+  FaPhoneAlt,
+  FaUser,
+  FaUserShield,
+  FaUsers
+} from "react-icons/fa";
 import AppHeader from "@/components/AppHeader";
 import Breadcrumb from "@/components/Breadcrumb";
-import {
-  addItem,
-  buildId,
-  ensureSeedData,
-  findPersonIdByIdentity,
-  getList,
-  normalize,
-  setCurrentUser
-} from "@/lib/storage";
 import PasswordField from "@/components/PasswordField";
 
 const ROLE_CONFIG = {
@@ -172,76 +172,8 @@ export default function RegisterPage() {
     }
   }
 
-  function buildPersonId() {
-    return findPersonIdByIdentity(payerPhone, payerEmail) || buildId("person");
-  }
-
-  function registerPlayer(formData) {
-    const mobile = formData.get("mobile")?.toString().trim();
-    const email = payerEmail.trim();
-    const existingPlayer = getList("players").find(
-      (item) => normalize(item.mobile) === normalize(mobile) || normalize(item.email) === normalize(email)
-    );
-    if (existingPlayer) {
-      setMessage("Player profile already exists for this mobile/email. Please login or register as Team Owner.");
-      return false;
-    }
-
-    const player = {
-      id: buildId("player"),
-      personId: buildPersonId(),
-      role: "player",
-      name: formData.get("name")?.toString().trim(),
-      photo: playerPhotoPreview,
-      email,
-      mobile,
-      jerseySize: formData.get("jerseySize")?.toString().trim(),
-      jerseyName: formData.get("jerseyName")?.toString().trim(),
-      village: formData.get("village")?.toString().trim(),
-      password: formData.get("password")?.toString().trim(),
-      feePaid: ROLE_CONFIG.player.fee,
-      paymentRef,
-      registeredAt: new Date().toISOString()
-    };
-    addItem("players", player);
-    setCurrentUser({ id: player.id, role: player.role, personId: player.personId });
-    return true;
-  }
-
-  function registerTeamOwner(formData) {
-    const ownerMobile = formData.get("ownerMobile")?.toString().trim();
-    const email = payerEmail.trim();
-    const existingOwner = getList("teamOwners").find(
-      (item) => normalize(item.ownerMobile) === normalize(ownerMobile) || normalize(item.email) === normalize(email)
-    );
-    if (existingOwner) {
-      setMessage("Team Owner profile already exists for this mobile/email. Please login or register as Player.");
-      return false;
-    }
-
-    const owner = {
-      id: buildId("owner"),
-      personId: buildPersonId(),
-      role: "team_owner",
-      ownerName: formData.get("ownerName")?.toString().trim(),
-      teamName: formData.get("teamName")?.toString().trim(),
-      logo: teamLogoPreview,
-      email,
-      jerseyPattern: formData.get("jerseyPattern")?.toString().trim(),
-      ownerMobile,
-      password: formData.get("password")?.toString().trim(),
-      feePaid: ROLE_CONFIG.team_owner.fee,
-      paymentRef,
-      registeredAt: new Date().toISOString()
-    };
-    addItem("teamOwners", owner);
-    setCurrentUser({ id: owner.id, role: owner.role, personId: owner.personId });
-    return true;
-  }
-
-  function onSubmit(event) {
+  async function onSubmit(event) {
     event.preventDefault();
-    ensureSeedData();
 
     if (!paymentDone) {
       setMessage("Payment is required before registration.");
@@ -259,11 +191,46 @@ export default function RegisterPage() {
     }
 
     const formData = new FormData(event.currentTarget);
-    const success = role === "player" ? registerPlayer(formData) : registerTeamOwner(formData);
 
-    if (success) {
-      router.push("/dashboard");
+    const profile =
+      role === "player"
+        ? {
+            name: formData.get("name")?.toString().trim(),
+            photo: playerPhotoPreview,
+            mobile: formData.get("mobile")?.toString().trim(),
+            jerseySize: formData.get("jerseySize")?.toString().trim(),
+            jerseyName: formData.get("jerseyName")?.toString().trim(),
+            village: formData.get("village")?.toString().trim(),
+            password: formData.get("password")?.toString().trim()
+          }
+        : {
+            ownerName: formData.get("ownerName")?.toString().trim(),
+            teamName: formData.get("teamName")?.toString().trim(),
+            logo: teamLogoPreview,
+            jerseyPattern: formData.get("jerseyPattern")?.toString().trim(),
+            ownerMobile: formData.get("ownerMobile")?.toString().trim(),
+            password: formData.get("password")?.toString().trim()
+          };
+
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        role,
+        payerEmail,
+        payerPhone,
+        paymentRef,
+        profile
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      setMessage(data.error || "Registration failed.");
+      return;
     }
+
+    router.push("/dashboard");
   }
 
   return (
@@ -278,7 +245,10 @@ export default function RegisterPage() {
         />
 
         <section className="card">
-          <h2>Register for KMPL Season-1</h2>
+          <h2 className="section-title">
+            <FaUsers aria-hidden="true" />
+            <span>Register for KMPL Season-1</span>
+          </h2>
 
           <div className="switch-row">
             <button
@@ -291,7 +261,10 @@ export default function RegisterPage() {
               }}
               type="button"
             >
-              Register as Player
+              <span className="icon-inline">
+                <FaUser aria-hidden="true" />
+                <span>Register as Player</span>
+              </span>
             </button>
             <button
               className={`chip ${role === "team_owner" ? "active" : ""}`}
@@ -303,7 +276,10 @@ export default function RegisterPage() {
               }}
               type="button"
             >
-              Register as Team Owner
+              <span className="icon-inline">
+                <FaUserShield aria-hidden="true" />
+                <span>Register as Team Owner</span>
+              </span>
             </button>
           </div>
 
@@ -316,11 +292,17 @@ export default function RegisterPage() {
             </p>
             <div className="form-grid">
               <label>
-                Name for Payment
+                <span className="icon-inline">
+                  <FaUser aria-hidden="true" />
+                  <span>Name for Payment</span>
+                </span>
                 <input value={payerName} onChange={(event) => setPayerName(event.target.value)} />
               </label>
               <label>
-                Email for Payment
+                <span className="icon-inline">
+                  <FaEnvelope aria-hidden="true" />
+                  <span>Email for Payment</span>
+                </span>
                 <input
                   type="email"
                   value={payerEmail}
@@ -328,16 +310,21 @@ export default function RegisterPage() {
                 />
               </label>
               <label>
-                Mobile for Payment
+                <span className="icon-inline">
+                  <FaPhoneAlt aria-hidden="true" />
+                  <span>Mobile for Payment</span>
+                </span>
                 <input type="tel" value={payerPhone} onChange={(event) => setPayerPhone(event.target.value)} />
               </label>
             </div>
-            <button className="btn" type="button" onClick={startRazorpay} disabled={paying}>
-              {paying ? "Opening Checkout..." : "Pay with Razorpay"}
-            </button>
-            <p className="muted">
-              If you already registered as one role, you can use the same mobile/email to add the other role.
-            </p>
+            {!paymentDone ? (
+              <button className="btn icon-btn" type="button" onClick={startRazorpay} disabled={paying}>
+                <FaCreditCard aria-hidden="true" />
+                <span>{paying ? "Opening Checkout..." : "Pay with Razorpay"}</span>
+              </button>
+            ) : (
+              <p className="message">Payment completed. You can submit registration below.</p>
+            )}
           </div>
 
           {paymentDone ? (
@@ -420,8 +407,9 @@ export default function RegisterPage() {
                   <label>Password<PasswordField name="password" required /></label>
                 </>
               )}
-              <button className="btn" type="submit">
-                Submit Registration
+              <button className="btn icon-btn" type="submit">
+                <FaCheckCircle aria-hidden="true" />
+                <span>Submit Registration</span>
               </button>
             </form>
           ) : (

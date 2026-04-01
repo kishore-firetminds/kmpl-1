@@ -3,12 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  AUTH_CHANGED_EVENT,
-  clearCurrentUser,
-  ensureSeedData,
-  getCurrentUser
-} from "@/lib/storage";
 
 export default function AppHeader() {
   const router = useRouter();
@@ -16,30 +10,40 @@ export default function AppHeader() {
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    ensureSeedData();
+    let mounted = true;
 
-    const syncAuth = () => {
-      setCurrentUser(getCurrentUser());
-    };
+    async function loadMe() {
+      try {
+        const response = await fetch("/api/auth/me", { cache: "no-store" });
+        if (!response.ok) {
+          if (mounted) setCurrentUser(null);
+          return;
+        }
+        const data = await response.json();
+        if (mounted) setCurrentUser(data.user || null);
+      } catch {
+        if (mounted) setCurrentUser(null);
+      }
+    }
 
-    syncAuth();
-    window.addEventListener(AUTH_CHANGED_EVENT, syncAuth);
-    window.addEventListener("storage", syncAuth);
-
+    loadMe();
     return () => {
-      window.removeEventListener(AUTH_CHANGED_EVENT, syncAuth);
-      window.removeEventListener("storage", syncAuth);
+      mounted = false;
     };
-  }, []);
+  }, [pathname]);
 
-  function logout() {
-    clearCurrentUser();
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setCurrentUser(null);
     router.push("/login");
   }
 
   return (
     <header className="topbar">
-      <Link href="/" className="brand">KMPL Season-1</Link>
+      <Link href="/" className="brand brand-logo" aria-label="Manegaaru Premier League">
+        <span className="brand-main">Manegaaru</span>
+        <span className="brand-sub">Premier League</span>
+      </Link>
 
       <div className="actions">
         {currentUser ? (

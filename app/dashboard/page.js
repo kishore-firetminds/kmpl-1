@@ -4,15 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import Breadcrumb from "@/components/Breadcrumb";
-import {
-  addItem,
-  buildId,
-  deleteItem,
-  ensureSeedData,
-  getCurrentUser,
-  getList,
-  updateItem
-} from "@/lib/storage";
+import { FaDownload, FaEdit, FaPlusCircle, FaTable, FaTrashAlt, FaTachometerAlt, FaUsers, FaUserShield } from "react-icons/fa";
 import PasswordField from "@/components/PasswordField";
 
 function KeyValue({ label, value }) {
@@ -56,21 +48,31 @@ export default function DashboardPage() {
   const [editDraft, setEditDraft] = useState({});
 
   useEffect(() => {
-    ensureSeedData();
-    const active = getCurrentUser();
-    if (!active) {
-      router.push("/login");
-      return;
-    }
-    setCurrentUserState(active);
-    refresh();
+    refresh(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function refresh() {
-    setPlayers(getList("players"));
-    setTeamOwners(getList("teamOwners"));
-    setSuperAdmins(getList("superAdmins"));
+  async function refresh(firstLoad = false) {
+    const response = await fetch("/api/dashboard/data", { cache: "no-store" });
+    if (!response.ok) {
+      if (response.status === 401) {
+        router.push("/login");
+        return;
+      }
+      const data = await response.json();
+      setMessage(data.error || "Unable to load dashboard data.");
+      return;
+    }
+
+    const data = await response.json();
+    setCurrentUserState(data.currentUser || null);
+    setPlayers(data.players || []);
+    setTeamOwners(data.teamOwners || []);
+    setSuperAdmins(data.superAdmins || []);
+
+    if (!data.currentUser && firstLoad) {
+      router.push("/login");
+    }
   }
 
   const me = useMemo(() => {
@@ -91,28 +93,105 @@ export default function DashboardPage() {
     setMessage("");
   }
 
-  function saveEdit(event) {
+  async function saveEdit(event) {
     event.preventDefault();
     if (!editType || !editId) return;
-    const key = editType === "player" ? "players" : editType === "team_owner" ? "teamOwners" : "superAdmins";
-    updateItem(key, editId, editDraft);
-    refresh();
+
+    const response = await fetch("/api/dashboard/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ editType, editId, editDraft })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      setMessage(data.error || "Unable to update record.");
+      return;
+    }
+
+    await refresh();
     setEditType("");
     setEditId("");
     setEditDraft({});
     setMessage("Record updated.");
   }
 
-  function remove(type, id) {
-    const key = type === "player" ? "players" : type === "team_owner" ? "teamOwners" : "superAdmins";
-    deleteItem(key, id);
-    refresh();
+  async function remove(type, id) {
+    const response = await fetch("/api/dashboard/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, id })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      setMessage(data.error || "Unable to delete record.");
+      return;
+    }
+
+    await refresh();
     setMessage("Record deleted.");
   }
 
-  function createByAdmin(event) {
+  function downloadPlayersCsv() {
+    if (!players.length) {
+      setMessage("No players found to download.");
+      return;
+    }
+
+    const headers = [
+      "id",
+      "personId",
+      "name",
+      "email",
+      "mobile",
+      "jerseySize",
+      "jerseyName",
+      "village",
+      "feePaid",
+      "paymentRef",
+      "registeredAt"
+    ];
+
+    const escapeCsv = (value) => {
+      const text = String(value ?? "").replace(/"/g, '""');
+      return `"${text}"`;
+    };
+
+    const rows = players.map((player) =>
+      [
+        player.id,
+        player.personId,
+        player.name,
+        player.email,
+        player.mobile,
+        player.jerseySize,
+        player.jerseyName,
+        player.village,
+        player.feePaid,
+        player.paymentRef,
+        player.registeredAt
+      ].map(escapeCsv).join(",")
+    );
+
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const datePart = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `kmpl-players-${datePart}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function createByAdmin(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+
+    let data = {};
 
     if (createRole === "player") {
       if (!createPlayerPhoto) {
@@ -120,92 +199,98 @@ export default function DashboardPage() {
         return;
       }
 
-      addItem("players", {
-        id: buildId("player"),
-        role: "player",
-        personId: buildId("person"),
+      data = {
         name: form.get("name")?.toString().trim(),
         photo: createPlayerPhoto,
-        email: "",
+        email: form.get("email")?.toString().trim(),
         mobile: form.get("mobile")?.toString().trim(),
         jerseySize: form.get("jerseySize")?.toString().trim(),
         jerseyName: form.get("jerseyName")?.toString().trim(),
         village: form.get("village")?.toString().trim(),
-        password: form.get("password")?.toString().trim(),
-        feePaid: 310,
-        paymentRef: "ADMIN_CREATED",
-        registeredAt: new Date().toISOString()
-      });
+        password: form.get("password")?.toString().trim()
+      };
     } else if (createRole === "team_owner") {
       if (!createTeamLogo) {
         setMessage("Upload team logo before creating team owner.");
         return;
       }
 
-      addItem("teamOwners", {
-        id: buildId("owner"),
-        role: "team_owner",
-        personId: buildId("person"),
+      data = {
         ownerName: form.get("ownerName")?.toString().trim(),
         teamName: form.get("teamName")?.toString().trim(),
         logo: createTeamLogo,
-        email: "",
+        email: form.get("email")?.toString().trim(),
         jerseyPattern: form.get("jerseyPattern")?.toString().trim(),
         ownerMobile: form.get("ownerMobile")?.toString().trim(),
-        password: form.get("password")?.toString().trim(),
-        feePaid: 5100,
-        paymentRef: "ADMIN_CREATED",
-        registeredAt: new Date().toISOString()
-      });
+        password: form.get("password")?.toString().trim()
+      };
     } else {
-      addItem("superAdmins", {
-        id: buildId("admin"),
-        role: "super_admin",
+      data = {
         name: form.get("adminName")?.toString().trim(),
         email: form.get("email")?.toString().trim(),
-        password: form.get("password")?.toString().trim(),
-        createdAt: new Date().toISOString()
-      });
+        password: form.get("password")?.toString().trim()
+      };
+    }
+
+    const response = await fetch("/api/dashboard/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ createRole, data })
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      setMessage(result.error || "Unable to create record.");
+      return;
     }
 
     event.currentTarget.reset();
     setCreatePlayerPhoto("");
     setCreateTeamLogo("");
-    refresh();
+    await refresh();
     setMessage("Record created.");
   }
 
-  function updateSelf(event, role) {
+  async function updateSelf(event, role) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     if (!currentUser || !me) return;
 
-    if (role === "player") {
-      updateItem("players", currentUser.id, {
-        name: form.get("name")?.toString().trim(),
-        photo: selfPlayerPhoto || me.photo,
-        mobile: form.get("mobile")?.toString().trim(),
-        jerseySize: form.get("jerseySize")?.toString().trim(),
-        jerseyName: form.get("jerseyName")?.toString().trim(),
-        village: form.get("village")?.toString().trim(),
-        password: form.get("password")?.toString().trim()
-      });
-      setSelfPlayerPhoto("");
+    const data =
+      role === "player"
+        ? {
+            name: form.get("name")?.toString().trim(),
+            photo: selfPlayerPhoto || me.photo,
+            mobile: form.get("mobile")?.toString().trim(),
+            jerseySize: form.get("jerseySize")?.toString().trim(),
+            jerseyName: form.get("jerseyName")?.toString().trim(),
+            village: form.get("village")?.toString().trim(),
+            password: form.get("password")?.toString().trim()
+          }
+        : {
+            ownerName: form.get("ownerName")?.toString().trim(),
+            teamName: form.get("teamName")?.toString().trim(),
+            logo: selfTeamLogo || me.logo,
+            jerseyPattern: form.get("jerseyPattern")?.toString().trim(),
+            ownerMobile: form.get("ownerMobile")?.toString().trim(),
+            password: form.get("password")?.toString().trim()
+          };
+
+    const response = await fetch("/api/dashboard/update-self", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, data })
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      setMessage(result.error || "Unable to update profile.");
+      return;
     }
 
-    if (role === "team_owner") {
-      updateItem("teamOwners", currentUser.id, {
-        ownerName: form.get("ownerName")?.toString().trim(),
-        teamName: form.get("teamName")?.toString().trim(),
-        logo: selfTeamLogo || me.logo,
-        jerseyPattern: form.get("jerseyPattern")?.toString().trim(),
-        ownerMobile: form.get("ownerMobile")?.toString().trim(),
-        password: form.get("password")?.toString().trim()
-      });
-      setSelfTeamLogo("");
-    }
-
-    refresh();
+    setSelfPlayerPhoto("");
+    setSelfTeamLogo("");
+    await refresh();
     setMessage("Profile updated.");
   }
 
@@ -225,7 +310,7 @@ export default function DashboardPage() {
         <section className="card">
           <div className="row space-between">
             <div>
-              <h2>Dashboard ({currentUser.role.replace("_", " ")})</h2>
+              <h2 className="section-title"><FaTachometerAlt aria-hidden="true" /><span>Dashboard ({currentUser.role.replace("_", " ")})</span></h2>
               <p className="muted">Logged in as ID: {currentUser.id}</p>
             </div>
           </div>
@@ -235,7 +320,7 @@ export default function DashboardPage() {
         {currentUser.role === "super_admin" ? (
           <>
             <section className="card">
-              <h3>Create Users</h3>
+              <h3 className="section-title"><FaPlusCircle aria-hidden="true" /><span>Create Users</span></h3>
               <div className="switch-row">
                 <button
                   className={`chip ${createRole === "player" ? "active" : ""}`}
@@ -274,6 +359,7 @@ export default function DashboardPage() {
                 {createRole === "player" ? (
                   <>
                     <label>Name<input name="name" required /></label>
+                    <label>Email<input name="email" type="email" /></label>
                     <label>
                       Photo Upload
                       <input
@@ -310,6 +396,7 @@ export default function DashboardPage() {
                 {createRole === "team_owner" ? (
                   <>
                     <label>Owner Name<input name="ownerName" required /></label>
+                    <label>Email<input name="email" type="email" /></label>
                     <label>Team Name<input name="teamName" required /></label>
                     <label>
                       Logo Upload
@@ -354,127 +441,75 @@ export default function DashboardPage() {
             </section>
 
             <section className="card">
-              <h3>Players Table</h3>
+              <div className="row space-between">
+                <h3 className="section-title"><FaUsers aria-hidden="true" /><span>Players Table</span></h3>
+                <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}><FaDownload aria-hidden="true" /><span>Download Players CSV</span></button>
+              </div>
               <div className="desktop-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Name</th><th>Person ID</th><th>Email</th><th>Photo</th><th>Mobile</th><th>Jersey Size</th><th>Jersey Name</th><th>Village</th><th>Password</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
+                      <th>Name</th><th>Person ID</th><th>Email</th><th>Photo</th><th>Mobile</th><th>Jersey Size</th><th>Jersey Name</th><th>Village</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {players.map((p) => (
                       <tr key={p.id}>
-                        <td>{p.name}</td><td>{p.personId || "-"}</td><td>{p.email || "-"}</td><td><ImageThumb src={p.photo} alt={`${p.name} photo`} /></td><td>{p.mobile}</td><td>{p.jerseySize}</td><td>{p.jerseyName}</td><td>{p.village}</td><td>{p.password}</td><td>{p.feePaid}</td><td>{p.paymentRef}</td>
+                        <td>{p.name}</td><td>{p.personId || "-"}</td><td>{p.email || "-"}</td><td><ImageThumb src={p.photo} alt={`${p.name} photo`} /></td><td>{p.mobile}</td><td>{p.jerseySize}</td><td>{p.jerseyName}</td><td>{p.village}</td><td>{p.feePaid}</td><td>{p.paymentRef}</td>
                         <td className="actions-cell">
-                          <button className="btn mini" onClick={() => startEdit("player", p)}>Edit</button>
-                          <button className="btn mini danger" onClick={() => remove("player", p.id)}>Delete</button>
+                          <button className="btn mini" onClick={() => startEdit("player", p)}><FaEdit aria-hidden="true" /> <span>Edit</span></button>
+                          <button className="btn mini danger" onClick={() => remove("player", p.id)}><FaTrashAlt aria-hidden="true" /> <span>Delete</span></button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="mobile-cards">
-                {players.map((p) => (
-                  <article className="card soft" key={p.id}>
-                    <KeyValue label="Name" value={p.name} />
-                    <KeyValue label="Person ID" value={p.personId || "-"} />
-                    <KeyValue label="Email" value={p.email || "-"} />
-                    <p><strong>Photo:</strong> <ImageThumb src={p.photo} alt={`${p.name} photo`} /></p>
-                    <KeyValue label="Mobile" value={p.mobile} />
-                    <KeyValue label="Jersey Size" value={p.jerseySize} />
-                    <KeyValue label="Jersey Name" value={p.jerseyName} />
-                    <KeyValue label="Village" value={p.village} />
-                    <KeyValue label="Password" value={p.password} />
-                    <KeyValue label="Fee" value={p.feePaid} />
-                    <KeyValue label="Payment Ref" value={p.paymentRef} />
-                    <div className="actions-row">
-                      <button className="btn mini" onClick={() => startEdit("player", p)}>Edit</button>
-                      <button className="btn mini danger" onClick={() => remove("player", p.id)}>Delete</button>
-                    </div>
-                  </article>
-                ))}
-              </div>
             </section>
 
             <section className="card">
-              <h3>Team Owners Table</h3>
+              <h3 className="section-title"><FaUserShield aria-hidden="true" /><span>Team Owners Table</span></h3>
               <div className="desktop-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Owner Name</th><th>Person ID</th><th>Email</th><th>Team Name</th><th>Logo</th><th>Jersey Pattern</th><th>Mobile</th><th>Password</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
+                      <th>Owner Name</th><th>Person ID</th><th>Email</th><th>Team Name</th><th>Logo</th><th>Jersey Pattern</th><th>Mobile</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {teamOwners.map((t) => (
                       <tr key={t.id}>
-                        <td>{t.ownerName}</td><td>{t.personId || "-"}</td><td>{t.email || "-"}</td><td>{t.teamName}</td><td><ImageThumb src={t.logo} alt={`${t.teamName} logo`} /></td><td>{t.jerseyPattern}</td><td>{t.ownerMobile}</td><td>{t.password}</td><td>{t.feePaid}</td><td>{t.paymentRef}</td>
+                        <td>{t.ownerName}</td><td>{t.personId || "-"}</td><td>{t.email || "-"}</td><td>{t.teamName}</td><td><ImageThumb src={t.logo} alt={`${t.teamName} logo`} /></td><td>{t.jerseyPattern}</td><td>{t.ownerMobile}</td><td>{t.feePaid}</td><td>{t.paymentRef}</td>
                         <td className="actions-cell">
-                          <button className="btn mini" onClick={() => startEdit("team_owner", t)}>Edit</button>
-                          <button className="btn mini danger" onClick={() => remove("team_owner", t.id)}>Delete</button>
+                          <button className="btn mini" onClick={() => startEdit("team_owner", t)}><FaEdit aria-hidden="true" /> <span>Edit</span></button>
+                          <button className="btn mini danger" onClick={() => remove("team_owner", t.id)}><FaTrashAlt aria-hidden="true" /> <span>Delete</span></button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-              <div className="mobile-cards">
-                {teamOwners.map((t) => (
-                  <article className="card soft" key={t.id}>
-                    <KeyValue label="Owner Name" value={t.ownerName} />
-                    <KeyValue label="Person ID" value={t.personId || "-"} />
-                    <KeyValue label="Email" value={t.email || "-"} />
-                    <KeyValue label="Team Name" value={t.teamName} />
-                    <p><strong>Logo:</strong> <ImageThumb src={t.logo} alt={`${t.teamName} logo`} /></p>
-                    <KeyValue label="Jersey Pattern" value={t.jerseyPattern} />
-                    <KeyValue label="Mobile" value={t.ownerMobile} />
-                    <KeyValue label="Password" value={t.password} />
-                    <KeyValue label="Fee" value={t.feePaid} />
-                    <KeyValue label="Payment Ref" value={t.paymentRef} />
-                    <div className="actions-row">
-                      <button className="btn mini" onClick={() => startEdit("team_owner", t)}>Edit</button>
-                      <button className="btn mini danger" onClick={() => remove("team_owner", t.id)}>Delete</button>
-                    </div>
-                  </article>
-                ))}
               </div>
             </section>
 
             <section className="card">
-              <h3>Super Admins Table</h3>
+              <h3 className="section-title"><FaTable aria-hidden="true" /><span>Super Admins Table</span></h3>
               <div className="desktop-table">
                 <table>
                   <thead>
-                    <tr><th>Name</th><th>Email</th><th>Password</th><th>Created At</th><th>Actions</th></tr>
+                    <tr><th>Name</th><th>Email</th><th>Created At</th><th>Actions</th></tr>
                   </thead>
                   <tbody>
                     {superAdmins.map((a) => (
                       <tr key={a.id}>
-                        <td>{a.name}</td><td>{a.email}</td><td>{a.password}</td><td>{new Date(a.createdAt).toLocaleString()}</td>
+                        <td>{a.name}</td><td>{a.email}</td><td>{new Date(a.createdAt).toLocaleString()}</td>
                         <td className="actions-cell">
-                          <button className="btn mini" onClick={() => startEdit("super_admin", a)}>Edit</button>
-                          <button className="btn mini danger" onClick={() => remove("super_admin", a.id)}>Delete</button>
+                          <button className="btn mini" onClick={() => startEdit("super_admin", a)}><FaEdit aria-hidden="true" /> <span>Edit</span></button>
+                          <button className="btn mini danger" onClick={() => remove("super_admin", a.id)}><FaTrashAlt aria-hidden="true" /> <span>Delete</span></button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-              <div className="mobile-cards">
-                {superAdmins.map((a) => (
-                  <article className="card soft" key={a.id}>
-                    <KeyValue label="Name" value={a.name} />
-                    <KeyValue label="Email" value={a.email} />
-                    <KeyValue label="Password" value={a.password} />
-                    <KeyValue label="Created At" value={new Date(a.createdAt).toLocaleString()} />
-                    <div className="actions-row">
-                      <button className="btn mini" onClick={() => startEdit("super_admin", a)}>Edit</button>
-                      <button className="btn mini danger" onClick={() => remove("super_admin", a.id)}>Delete</button>
-                    </div>
-                  </article>
-                ))}
               </div>
             </section>
 
@@ -487,15 +522,7 @@ export default function DashboardPage() {
                     .map((key) => (
                       <label key={key}>
                         {key}
-                        {key === "password" ? (
-                          <PasswordField
-                            name={key}
-                            value={editDraft[key] ?? ""}
-                            onChange={(event) =>
-                              setEditDraft((prev) => ({ ...prev, [key]: event.target.value }))
-                            }
-                          />
-                        ) : key === "photo" || key === "logo" ? (
+                        {key === "photo" || key === "logo" ? (
                           <>
                             <input
                               type="file"
@@ -562,7 +589,7 @@ export default function DashboardPage() {
               <label>Jersey Size<input name="jerseySize" defaultValue={me.jerseySize} required /></label>
               <label>Jersey Name<input name="jerseyName" defaultValue={me.jerseyName} required /></label>
               <label>Village<input name="village" defaultValue={me.village} required /></label>
-              <label>Password<PasswordField name="password" defaultValue={me.password} required /></label>
+              <label>Password<PasswordField name="password" required /></label>
               <button className="btn" type="submit">Update Profile</button>
             </form>
           </section>
@@ -596,7 +623,7 @@ export default function DashboardPage() {
               </div>
               <label>Jersey Pattern<input name="jerseyPattern" defaultValue={me.jerseyPattern} required /></label>
               <label>Owner Mobile<input name="ownerMobile" defaultValue={me.ownerMobile} required /></label>
-              <label>Password<PasswordField name="password" defaultValue={me.password} required /></label>
+              <label>Password<PasswordField name="password" required /></label>
               <button className="btn" type="submit">Update Team Profile</button>
             </form>
           </section>
@@ -605,6 +632,5 @@ export default function DashboardPage() {
     </main>
   );
 }
-
 
 
