@@ -8,6 +8,7 @@ create table if not exists public.players (
   photo text,
   email text,
   mobile text not null,
+  jersey_number text,
   jersey_size text,
   jersey_name text,
   village text,
@@ -56,3 +57,8 @@ create table if not exists public.super_admins (
 -- alter table public.team_owners enable row level security;
 -- alter table public.super_admins enable row level security;
 -- For this app, server APIs use service-role key so RLS is bypassed server-side.
+
+
+-- Migration for existing DBs:
+alter table public.players add column if not exists jersey_number text;
+

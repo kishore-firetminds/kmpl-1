@@ -40,6 +40,7 @@ export async function POST(request) {
         photo: data.photo,
         email: data.email || "",
         mobile: data.mobile,
+        jerseyNumber: data.jerseyNumber,
         jerseySize: data.jerseySize,
         jerseyName: data.jerseyName,
         village: data.village,
@@ -91,3 +92,4 @@ export async function POST(request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

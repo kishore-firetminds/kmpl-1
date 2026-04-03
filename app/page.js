@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   FaCalendarAlt,
+  FaCheckCircle,
   FaCoins,
   FaSignInAlt,
   FaTrophy,
@@ -12,6 +13,8 @@ import {
 import AppHeader from "@/components/AppHeader";
 import Breadcrumb from "@/components/Breadcrumb";
 import heroImage from "./assets/hero.png";
+import sponsorOneImage from "./assets/sponsor-1.jpeg";
+import sponsorTwoImage from "./assets/sponsor-2.jpeg";
 
 export default function HomePage() {
   return (
@@ -26,11 +29,26 @@ export default function HomePage() {
               <FaUsers aria-hidden="true" />
               <span>Tennis Ball Cricket Tournament</span>
             </p>
+
             <h1>Kammanapalli Premier League Season-1</h1>
-            <p>
+
+            <p className="hero-desc">
               Auction-based tournament with limited slots. Register as Player or Team Owner,
-              complete payment, and get ready for match days.
+              complete payment, and get ready for high-energy match days.
             </p>
+
+            <div className="hero-badges">
+              <span className="hero-badge">Auction Format</span>
+              <span className="hero-badge">130 Players Max</span>
+              <span className="hero-badge">10 Teams Max</span>
+            </div>
+
+            <div className="hero-points">
+              <p className="hero-point"><FaCheckCircle aria-hidden="true" /> <span>Player Entry: INR 310</span></p>
+              <p className="hero-point"><FaCheckCircle aria-hidden="true" /> <span>Team Entry: INR 5,100</span></p>
+              <p className="hero-point"><FaCheckCircle aria-hidden="true" /> <span>Matches: 18 Apr 2026 to 20 Apr 2026</span></p>
+            </div>
+
             <div className="actions-row hero-actions">
               <Link href="/register" className="btn icon-btn">
                 <FaUserPlus aria-hidden="true" />
@@ -115,18 +133,27 @@ export default function HomePage() {
         <section className="sponsors-section">
           <div className="section-head">
             <h2>Title Sponsors</h2>
-            <p className="muted">Proud partners powering <Link href="/" className="brand brand-logo" aria-label="Manegaaru Premier League">
-        <span className="brand-main">Manegaaru</span>
-        <span className="brand-sub">Premier League</span>
-      </Link></p>
+            <p className="muted">Proud partners powering Manegaaru Premier League.</p>
           </div>
           <div className="sponsors-grid">
             <article className="sponsor-card">
-              <div className="sponsor-icon-wrap"><FaUserCircle className="sponsor-icon" aria-hidden="true" /></div>
+              <div className="sponsor-icon-wrap">
+                <Image
+                  src={sponsorOneImage}
+                  alt="Sponsor 1"
+                  className="sponsor-photo"
+                />
+              </div>
               <h4>K SIVA KUMAR</h4>
             </article>
             <article className="sponsor-card">
-              <div className="sponsor-icon-wrap"><FaUserCircle className="sponsor-icon" aria-hidden="true" /></div>
+              <div className="sponsor-icon-wrap">
+                <Image
+                  src={sponsorTwoImage}
+                  alt="Sponsor 2"
+                  className="sponsor-photo"
+                />
+              </div>
               <h4>DINESH & JP (Brothers)</h4>
             </article>
             <article className="sponsor-card">

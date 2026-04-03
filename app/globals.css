@@ -16,7 +16,7 @@
 
 body {
   margin: 0;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-body), "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: radial-gradient(circle at top right, #ede2ff 0%, var(--bg) 48%, #f3ebff 100%);
   color: var(--text);
 }
@@ -261,6 +261,22 @@ td {
 
 .actions-cell {
   min-width: 150px;
+  display: flex;
+  gap: 6px;
+}
+
+.icon-only-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-only-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .mobile-cards {
@@ -282,11 +298,11 @@ td {
   }
 
   .desktop-table {
-    display: block;
+    display: none;
   }
 
   .mobile-cards {
-    display: none;
+    display: grid;
   }
 }
 
@@ -512,7 +528,7 @@ td {
 
 .prize-item strong {
   color: var(--primary-dark);
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .stat-strip {
@@ -584,6 +600,13 @@ td {
   width: 96px;
   height: 96px;
   color: var(--primary);
+}
+
+.sponsor-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .sponsor-card h4 {
@@ -683,4 +706,167 @@ td {
   color: var(--muted);
   font-size: 13px;
   text-align: center;
+}
+
+
+
+/* Hero content refinement */
+.hero-copy {
+  display: grid;
+  gap: 12px;
+}
+
+.hero-copy h1 {
+  margin: 0;
+  font-size: clamp(42px, 4.2vw, 60px);
+  line-height: 1.04;
+  letter-spacing: -0.6px;
+}
+
+.hero-desc {
+  margin: 0;
+  max-width: 52ch;
+  font-size: clamp(16px, 1.4vw, 22px);
+  line-height: 1.55;
+  color: #22313f;
+}
+
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hero-badge {
+  border: 1px solid #d6c1ff;
+  background: #f4ecff;
+  color: var(--primary-dark);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.hero-points {
+  display: grid;
+  gap: 6px;
+}
+
+.hero-point {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f2c39;
+  font-size: 15px;
+}
+
+.hero-point svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+
+/* Final hero typography override */
+.hero-copy h1 {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-weight: 800;
+  font-size: clamp(30px, 3.2vw, 44px);
+  line-height: 1.06;
+  letter-spacing: -0.9px;
+  max-width: 16ch;
+}
+
+.hero-tag {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: clamp(14px, 1.1vw, 18px);
+  font-weight: 700;
+}
+
+.hero-desc {
+  font-size: clamp(15px, 1.1vw, 18px);
+  line-height: 1.7;
+  color: #233244;
+  max-width: 42ch;
+}
+
+.hero-badge {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 11px;
+}
+
+.hero-point {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.hero-actions {
+  margin-top: 18px;
+}
+
+@media (max-width: 980px) {
+  .hero-copy h1 {
+    max-width: 100%;
+    font-size: clamp(26px, 7vw, 34px);
+  }
+
+  .hero-desc {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+}
+
+
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 12, 26, 0.5);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  z-index: 60;
+}
+
+.modal-card {
+  width: min(760px, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 20px 46px rgba(18, 12, 30, 0.3);
+}
+
+.modal-head {
+  margin-bottom: 10px;
+}
+
+
+
+.modal-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.modal-form-grid .field-full,
+.modal-form-grid .actions-row,
+.modal-form-grid .preview-card {
+  grid-column: 1 / -1;
+}
+
+.modal-form-grid input,
+.modal-form-grid textarea,
+.modal-form-grid select,
+.modal-form-grid .password-input-wrap {
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .modal-form-grid {
+    grid-template-columns: 1fr;
+  }
 }

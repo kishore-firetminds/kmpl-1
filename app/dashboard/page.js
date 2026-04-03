@@ -4,17 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import Breadcrumb from "@/components/Breadcrumb";
-import { FaDownload, FaEdit, FaPlusCircle, FaTable, FaTrashAlt, FaTachometerAlt, FaUsers, FaUserShield } from "react-icons/fa";
+import {
+  FaDownload,
+  FaEdit,
+  FaPlusCircle,
+  FaTable,
+  FaTachometerAlt,
+  FaTrashAlt,
+  FaUserShield,
+  FaUsers
+} from "react-icons/fa";
 import PasswordField from "@/components/PasswordField";
 import toast from "react-hot-toast";
-
-function KeyValue({ label, value }) {
-  return (
-    <p>
-      <strong>{label}:</strong> {value || "-"}
-    </p>
-  );
-}
 
 function ImageThumb({ src, alt }) {
   if (!src) return <span>-</span>;
@@ -53,14 +54,23 @@ export default function DashboardPage() {
   const [editType, setEditType] = useState("");
   const [editId, setEditId] = useState("");
   const [editDraft, setEditDraft] = useState({});
+  const [creating, setCreating] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     if (!message) return;
     const lowered = String(message).toLowerCase();
-    const isSuccess = lowered.includes("success") || lowered.includes("updated") || lowered.includes("created") || lowered.includes("deleted") || lowered.includes("downloaded") || lowered.includes("completed");
+    const isSuccess =
+      lowered.includes("success") ||
+      lowered.includes("updated") ||
+      lowered.includes("created") ||
+      lowered.includes("deleted") ||
+      lowered.includes("downloaded") ||
+      lowered.includes("completed");
     if (isSuccess) toast.success(message);
     else toast.error(message);
   }, [message]);
+
   useEffect(() => {
     refresh(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,27 +94,40 @@ export default function DashboardPage() {
     setTeamOwners(data.teamOwners || []);
     setSuperAdmins(data.superAdmins || []);
 
-    if (!data.currentUser && firstLoad) {
-      router.push("/login");
-    }
+    if (!data.currentUser && firstLoad) router.push("/login");
   }
 
   const me = useMemo(() => {
     if (!currentUser) return null;
-    if (currentUser.role === "player") {
-      return players.find((item) => item.id === currentUser.id);
-    }
-    if (currentUser.role === "team_owner") {
-      return teamOwners.find((item) => item.id === currentUser.id);
-    }
+    if (currentUser.role === "player") return players.find((item) => item.id === currentUser.id);
+    if (currentUser.role === "team_owner") return teamOwners.find((item) => item.id === currentUser.id);
     return superAdmins.find((item) => item.id === currentUser.id);
   }, [currentUser, players, teamOwners, superAdmins]);
+
+  function openCreateModal(role) {
+    setCreateRole(role);
+    setCreatePlayerPhoto("");
+    setCreateTeamLogo("");
+    setMessage("");
+    setShowCreateModal(true);
+  }
+
+  function closeCreateModal() {
+    if (creating) return;
+    setShowCreateModal(false);
+  }
 
   function startEdit(type, entry) {
     setEditType(type);
     setEditId(entry.id);
     setEditDraft(entry);
     setMessage("");
+  }
+
+  function closeEditModal() {
+    setEditType("");
+    setEditId("");
+    setEditDraft({});
   }
 
   async function saveEdit(event) {
@@ -124,9 +147,7 @@ export default function DashboardPage() {
     }
 
     await refresh();
-    setEditType("");
-    setEditId("");
-    setEditDraft({});
+    closeEditModal();
     setMessage("Record updated.");
   }
 
@@ -159,6 +180,7 @@ export default function DashboardPage() {
       "name",
       "email",
       "mobile",
+      "jerseyNumber",
       "jerseySize",
       "jerseyName",
       "village",
@@ -180,6 +202,7 @@ export default function DashboardPage() {
         player.name,
         player.email,
         player.mobile,
+        player.jerseyNumber,
         player.jerseySize,
         player.jerseyName,
         player.village,
@@ -202,16 +225,17 @@ export default function DashboardPage() {
     link.remove();
     URL.revokeObjectURL(url);
   }
-
   async function createByAdmin(event) {
     event.preventDefault();
+    if (creating) return;
+    setCreating(true);
     const form = new FormData(event.currentTarget);
 
     let data = {};
-
     if (createRole === "player") {
       if (!createPlayerPhoto) {
         setMessage("Upload player photo before creating player.");
+        setCreating(false);
         return;
       }
 
@@ -220,6 +244,7 @@ export default function DashboardPage() {
         photo: createPlayerPhoto,
         email: form.get("email")?.toString().trim(),
         mobile: form.get("mobile")?.toString().trim(),
+        jerseyNumber: form.get("jerseyNumber")?.toString().trim(),
         jerseySize: form.get("jerseySize")?.toString().trim(),
         jerseyName: form.get("jerseyName")?.toString().trim(),
         village: form.get("village")?.toString().trim(),
@@ -228,6 +253,7 @@ export default function DashboardPage() {
     } else if (createRole === "team_owner") {
       if (!createTeamLogo) {
         setMessage("Upload team logo before creating team owner.");
+        setCreating(false);
         return;
       }
 
@@ -257,6 +283,7 @@ export default function DashboardPage() {
     const result = await response.json();
     if (!response.ok) {
       setMessage(result.error || "Unable to create record.");
+      setCreating(false);
       return;
     }
 
@@ -265,6 +292,8 @@ export default function DashboardPage() {
     setCreateTeamLogo("");
     await refresh();
     setMessage("Record created.");
+    setCreating(false);
+    setShowCreateModal(false);
   }
 
   async function updateSelf(event, role) {
@@ -278,6 +307,7 @@ export default function DashboardPage() {
             name: form.get("name")?.toString().trim(),
             photo: selfPlayerPhoto || me.photo,
             mobile: form.get("mobile")?.toString().trim(),
+            jerseyNumber: form.get("jerseyNumber")?.toString().trim(),
             jerseySize: form.get("jerseySize")?.toString().trim(),
             jerseyName: form.get("jerseyName")?.toString().trim(),
             village: form.get("village")?.toString().trim(),
@@ -316,199 +346,224 @@ export default function DashboardPage() {
     <main>
       <AppHeader />
       <div className="container">
-        <Breadcrumb
-          items={[
-            { label: "Home", href: "/" },
-            { label: "Dashboard" }
-          ]}
-        />
+        <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Dashboard" }]} />
 
         <section className="card">
           <div className="row space-between">
             <div>
-              <h2 className="section-title"><FaTachometerAlt aria-hidden="true" /><span>Dashboard ({currentUser.role.replace("_", " ")})</span></h2>
+              <h2 className="section-title">
+                <FaTachometerAlt aria-hidden="true" />
+                <span>Dashboard ({currentUser.role.replace("_", " ")})</span>
+              </h2>
               <p className="muted">Logged in as ID: {currentUser.id}</p>
             </div>
           </div>
-          
         </section>
 
         {currentUser.role === "super_admin" ? (
           <>
-            <section className="card">
-              <h3 className="section-title"><FaPlusCircle aria-hidden="true" /><span>Create Users</span></h3>
-              <div className="switch-row">
-                <button
-                  className={`chip ${createRole === "player" ? "active" : ""}`}
-                  type="button"
-                  onClick={() => {
-                    setCreateRole("player");
-                    setCreateTeamLogo("");
-                  }}
-                >
-                  Player
-                </button>
-                <button
-                  className={`chip ${createRole === "team_owner" ? "active" : ""}`}
-                  type="button"
-                  onClick={() => {
-                    setCreateRole("team_owner");
-                    setCreatePlayerPhoto("");
-                  }}
-                >
-                  Team Owner
-                </button>
-                <button
-                  className={`chip ${createRole === "super_admin" ? "active" : ""}`}
-                  type="button"
-                  onClick={() => {
-                    setCreateRole("super_admin");
-                    setCreatePlayerPhoto("");
-                    setCreateTeamLogo("");
-                  }}
-                >
-                  Super Admin
-                </button>
-              </div>
+            {showCreateModal ? (
+              <div className="modal-overlay" role="dialog" aria-modal="true" onClick={closeCreateModal}>
+                <section className="modal-card" onClick={(event) => event.stopPropagation()}>
+                  <div className="row space-between modal-head">
+                    <h3 className="section-title">
+                      <FaPlusCircle aria-hidden="true" />
+                      <span>Create {createRole === "player" ? "Player" : createRole === "team_owner" ? "Team Owner" : "Admin"}</span>
+                    </h3>
+                    <button className="btn ghost" type="button" onClick={closeCreateModal}>Close</button>
+                  </div>
 
-              <form className="form-grid" onSubmit={createByAdmin}>
-                {createRole === "player" ? (
-                  <>
-                    <label>Name<input name="name" required /></label>
-                    <label>Email<input name="email" type="email" /></label>
-                    <label>
-                      Photo Upload
-                      <input
-                        name="photoFile"
-                        type="file"
-                        accept="image/*"
-                        required
-                        onChange={async (event) => {
-                          const file = event.target.files?.[0];
-                          if (!file) {
-                            setCreatePlayerPhoto("");
-                            return;
-                          }
-                          try {
-                            setCreatePlayerPhoto(await fileToDataUrl(file));
-                          } catch (error) {
-                            setMessage(error.message);
-                          }
-                        }}
-                      />
-                    </label>
-                    {createPlayerPhoto ? (
-                      <div className="preview-card">
-                        <img className="preview-image" src={createPlayerPhoto} alt="Player photo preview" />
-                      </div>
+                  <form className="form-grid modal-form-grid" onSubmit={createByAdmin}>
+                    {createRole === "player" ? (
+                      <>
+                        <label>Name<input name="name" required /></label>
+                        <label>Email<input name="email" type="email" /></label>
+                        <label className="field-full">
+                          Photo Upload
+                          <input
+                            name="photoFile"
+                            type="file"
+                            accept="image/*"
+                            required
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) {
+                                setCreatePlayerPhoto("");
+                                return;
+                              }
+                              try {
+                                setCreatePlayerPhoto(await fileToDataUrl(file));
+                              } catch (error) {
+                                setMessage(error.message);
+                              }
+                            }}
+                          />
+                        </label>
+                        {createPlayerPhoto ? <div className="preview-card field-full"><img className="preview-image" src={createPlayerPhoto} alt="Player photo preview" /></div> : null}
+                        <label>Mobile<input name="mobile" required /></label>
+                        <label>Jersey Number<input name="jerseyNumber" required /></label>
+                        <label>Jersey Size<input name="jerseySize" required /></label>
+                        <label>Jersey Name<input name="jerseyName" required /></label>
+                        <label>Village<input name="village" required /></label>
+                        <label>Password<PasswordField name="password" required /></label>
+                      </>
                     ) : null}
-                    <label>Mobile<input name="mobile" required /></label>
-                    <label>Jersey Size<input name="jerseySize" required /></label>
-                    <label>Jersey Name<input name="jerseyName" required /></label>
-                    <label>Village<input name="village" required /></label>
-                    <label>Password<PasswordField name="password" required /></label>
-                  </>
-                ) : null}
-                {createRole === "team_owner" ? (
-                  <>
-                    <label>Owner Name<input name="ownerName" required /></label>
-                    <label>Email<input name="email" type="email" /></label>
-                    <label>Team Name<input name="teamName" required /></label>
-                    <label>
-                      Logo Upload
-                      <input
-                        name="logoFile"
-                        type="file"
-                        accept="image/*"
-                        required
-                        onChange={async (event) => {
-                          const file = event.target.files?.[0];
-                          if (!file) {
-                            setCreateTeamLogo("");
-                            return;
-                          }
-                          try {
-                            setCreateTeamLogo(await fileToDataUrl(file));
-                          } catch (error) {
-                            setMessage(error.message);
-                          }
-                        }}
-                      />
-                    </label>
-                    {createTeamLogo ? (
-                      <div className="preview-card">
-                        <img className="preview-image" src={createTeamLogo} alt="Team logo preview" />
-                      </div>
+
+                    {createRole === "team_owner" ? (
+                      <>
+                        <label>Owner Name<input name="ownerName" required /></label>
+                        <label>Email<input name="email" type="email" /></label>
+                        <label>Team Name<input name="teamName" required /></label>
+                        <label className="field-full">
+                          Logo Upload
+                          <input
+                            name="logoFile"
+                            type="file"
+                            accept="image/*"
+                            required
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) {
+                                setCreateTeamLogo("");
+                                return;
+                              }
+                              try {
+                                setCreateTeamLogo(await fileToDataUrl(file));
+                              } catch (error) {
+                                setMessage(error.message);
+                              }
+                            }}
+                          />
+                        </label>
+                        {createTeamLogo ? <div className="preview-card field-full"><img className="preview-image" src={createTeamLogo} alt="Team logo preview" /></div> : null}
+                        <label>Jersey Pattern<input name="jerseyPattern" required /></label>
+                        <label>Owner Mobile<input name="ownerMobile" required /></label>
+                        <label>Password<PasswordField name="password" required /></label>
+                      </>
                     ) : null}
-                    <label>Jersey Pattern<input name="jerseyPattern" required /></label>
-                    <label>Owner Mobile<input name="ownerMobile" required /></label>
-                    <label>Password<PasswordField name="password" required /></label>
-                  </>
-                ) : null}
-                {createRole === "super_admin" ? (
-                  <>
-                    <label>Admin Name<input name="adminName" required /></label>
-                    <label>Email<input name="email" type="email" required /></label>
-                    <label>Password<PasswordField name="password" required /></label>
-                  </>
-                ) : null}
-                <button className="btn" type="submit">Create</button>
-              </form>
-            </section>
+
+                    {createRole === "super_admin" ? (
+                      <>
+                        <label>Admin Name<input name="adminName" required /></label>
+                        <label>Email<input name="email" type="email" required /></label>
+                        <label>Password<PasswordField name="password" required /></label>
+                      </>
+                    ) : null}
+
+                    <div className="actions-row field-full">
+                      <button className="btn" type="submit" disabled={creating}>{creating ? "Creating..." : "Create"}</button>
+                      <button className="btn ghost" type="button" onClick={closeCreateModal} disabled={creating}>Cancel</button>
+                    </div>
+                  </form>
+                </section>
+              </div>
+            ) : null}
 
             <section className="card">
               <div className="row space-between">
-                <h3 className="section-title"><FaUsers aria-hidden="true" /><span>Players Table</span></h3>
-                <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}><FaDownload aria-hidden="true" /><span>Download Players CSV</span></button>
+                <h3 className="section-title"><FaUsers aria-hidden="true" /><span>Players Table ({players.length})</span></h3>
+                <div className="actions-row">
+                  <button className="btn" type="button" onClick={() => openCreateModal("player")}>Create Player</button>
+                  <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}><FaDownload aria-hidden="true" /><span>Download Players CSV</span></button>
+                </div>
               </div>
               <div className="desktop-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Name</th><th>Person ID</th><th>Email</th><th>Photo</th><th>Mobile</th><th>Jersey Size</th><th>Jersey Name</th><th>Village</th><th>Fee</th><th>Payment Ref</th><th>Payment Status</th><th>Actions</th>
+                      <th>Name</th><th>Photo</th><th>Mobile</th><th>Person ID</th><th>Email</th><th>Jersey Number</th><th>Jersey Size</th><th>Jersey Name</th><th>Village</th><th>Fee</th><th>Payment Ref</th><th>Payment Status</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {players.map((p) => (
                       <tr key={p.id}>
-                        <td>{p.name}</td><td>{p.personId || "-"}</td><td>{p.email || "-"}</td><td><ImageThumb src={p.photo} alt={`${p.name} photo`} /></td><td>{p.mobile}</td><td>{p.jerseySize}</td><td>{p.jerseyName}</td><td>{p.village}</td><td>{p.feePaid}</td><td>{p.paymentRef}</td><td>{getPaymentStatus(p.paymentRef)}</td>
+                        <td>{p.name}</td><td><ImageThumb src={p.photo} alt={`${p.name} photo`} /></td><td>{p.mobile}</td><td>{p.personId || "-"}</td><td>{p.email || "-"}</td><td>{p.jerseyNumber || "-"}</td><td>{p.jerseySize}</td><td>{p.jerseyName}</td><td>{p.village}</td><td>{p.feePaid}</td><td>{p.paymentRef}</td><td>{getPaymentStatus(p.paymentRef)}</td>
                         <td className="actions-cell">
-                          <button className="btn mini" onClick={() => startEdit("player", p)}><FaEdit aria-hidden="true" /> <span>Edit</span></button>
-                          <button className="btn mini danger" onClick={() => remove("player", p.id)}><FaTrashAlt aria-hidden="true" /> <span>Delete</span></button>
+                          <button className="btn mini icon-only-btn" title="Edit" aria-label="Edit player" onClick={() => startEdit("player", p)}><FaEdit aria-hidden="true" /></button>
+                          <button className="btn mini danger icon-only-btn" title="Delete" aria-label="Delete player" onClick={() => remove("player", p.id)}><FaTrashAlt aria-hidden="true" /></button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              <div className="mobile-cards">
+                {players.map((p) => (
+                  <article className="card soft" key={p.id}>
+                    <p><strong>Name:</strong> {p.name}</p>
+                    <p><strong>Photo:</strong> <ImageThumb src={p.photo} alt={`${p.name} photo`} /></p>
+                    <p><strong>Mobile:</strong> {p.mobile}</p>
+                    <p><strong>Person ID:</strong> {p.personId || "-"}</p>
+                    <p><strong>Email:</strong> {p.email || "-"}</p>
+                    <p><strong>Jersey Number:</strong> {p.jerseyNumber || "-"}</p>
+                    <p><strong>Jersey Size:</strong> {p.jerseySize}</p>
+                    <p><strong>Jersey Name:</strong> {p.jerseyName}</p>
+                    <p><strong>Village:</strong> {p.village}</p>
+                    <p><strong>Fee:</strong> {p.feePaid}</p>
+                    <p><strong>Payment Ref:</strong> {p.paymentRef}</p>
+                    <p><strong>Payment Status:</strong> {getPaymentStatus(p.paymentRef)}</p>
+                    <div className="actions-row">
+                      <button className="btn mini icon-only-btn" title="Edit" aria-label="Edit player" onClick={() => startEdit("player", p)}><FaEdit aria-hidden="true" /></button>
+                      <button className="btn mini danger icon-only-btn" title="Delete" aria-label="Delete player" onClick={() => remove("player", p.id)}><FaTrashAlt aria-hidden="true" /></button>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </section>
 
             <section className="card">
-              <h3 className="section-title"><FaUserShield aria-hidden="true" /><span>Team Owners Table</span></h3>
+              <div className="row space-between">
+                <h3 className="section-title"><FaUserShield aria-hidden="true" /><span>Team Owners Table ({teamOwners.length})</span></h3>
+                <button className="btn" type="button" onClick={() => openCreateModal("team_owner")}>Create Team Owner</button>
+              </div>
               <div className="desktop-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Owner Name</th><th>Person ID</th><th>Email</th><th>Team Name</th><th>Logo</th><th>Jersey Pattern</th><th>Mobile</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
+                      <th>Owner Name</th><th>Logo</th><th>Mobile</th><th>Person ID</th><th>Email</th><th>Team Name</th><th>Jersey Pattern</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {teamOwners.map((t) => (
                       <tr key={t.id}>
-                        <td>{t.ownerName}</td><td>{t.personId || "-"}</td><td>{t.email || "-"}</td><td>{t.teamName}</td><td><ImageThumb src={t.logo} alt={`${t.teamName} logo`} /></td><td>{t.jerseyPattern}</td><td>{t.ownerMobile}</td><td>{t.feePaid}</td><td>{t.paymentRef}</td>
+                        <td>{t.ownerName}</td><td><ImageThumb src={t.logo} alt={`${t.teamName} logo`} /></td><td>{t.ownerMobile}</td><td>{t.personId || "-"}</td><td>{t.email || "-"}</td><td>{t.teamName}</td><td>{t.jerseyPattern}</td><td>{t.feePaid}</td><td>{t.paymentRef}</td>
                         <td className="actions-cell">
-                          <button className="btn mini" onClick={() => startEdit("team_owner", t)}><FaEdit aria-hidden="true" /> <span>Edit</span></button>
-                          <button className="btn mini danger" onClick={() => remove("team_owner", t.id)}><FaTrashAlt aria-hidden="true" /> <span>Delete</span></button>
+                          <button className="btn mini icon-only-btn" title="Edit" aria-label="Edit team owner" onClick={() => startEdit("team_owner", t)}><FaEdit aria-hidden="true" /></button>
+                          <button className="btn mini danger icon-only-btn" title="Delete" aria-label="Delete team owner" onClick={() => remove("team_owner", t.id)}><FaTrashAlt aria-hidden="true" /></button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              <div className="mobile-cards">
+                {teamOwners.map((t) => (
+                  <article className="card soft" key={t.id}>
+                    <p><strong>Owner Name:</strong> {t.ownerName}</p>
+                    <p><strong>Logo:</strong> <ImageThumb src={t.logo} alt={`${t.teamName} logo`} /></p>
+                    <p><strong>Mobile:</strong> {t.ownerMobile}</p>
+                    <p><strong>Person ID:</strong> {t.personId || "-"}</p>
+                    <p><strong>Email:</strong> {t.email || "-"}</p>
+                    <p><strong>Team Name:</strong> {t.teamName}</p>
+                    <p><strong>Jersey Pattern:</strong> {t.jerseyPattern}</p>
+                    <p><strong>Fee:</strong> {t.feePaid}</p>
+                    <p><strong>Payment Ref:</strong> {t.paymentRef}</p>
+                    <div className="actions-row">
+                      <button className="btn mini icon-only-btn" title="Edit" aria-label="Edit team owner" onClick={() => startEdit("team_owner", t)}><FaEdit aria-hidden="true" /></button>
+                      <button className="btn mini danger icon-only-btn" title="Delete" aria-label="Delete team owner" onClick={() => remove("team_owner", t.id)}><FaTrashAlt aria-hidden="true" /></button>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </section>
 
             <section className="card">
-              <h3 className="section-title"><FaTable aria-hidden="true" /><span>Super Admins Table</span></h3>
+              <div className="row space-between">
+                <h3 className="section-title"><FaTable aria-hidden="true" /><span>Super Admins Table ({superAdmins.length})</span></h3>
+                <button className="btn" type="button" onClick={() => openCreateModal("super_admin")}>Create Admin</button>
+              </div>
               <div className="desktop-table">
                 <table>
                   <thead>
@@ -519,59 +574,73 @@ export default function DashboardPage() {
                       <tr key={a.id}>
                         <td>{a.name}</td><td>{a.email}</td><td>{new Date(a.createdAt).toLocaleString()}</td>
                         <td className="actions-cell">
-                          <button className="btn mini" onClick={() => startEdit("super_admin", a)}><FaEdit aria-hidden="true" /> <span>Edit</span></button>
-                          <button className="btn mini danger" onClick={() => remove("super_admin", a.id)}><FaTrashAlt aria-hidden="true" /> <span>Delete</span></button>
+                          <button className="btn mini icon-only-btn" title="Edit" aria-label="Edit super admin" onClick={() => startEdit("super_admin", a)}><FaEdit aria-hidden="true" /></button>
+                          <button className="btn mini danger icon-only-btn" title="Delete" aria-label="Delete super admin" onClick={() => remove("super_admin", a.id)}><FaTrashAlt aria-hidden="true" /></button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              <div className="mobile-cards">
+                {superAdmins.map((a) => (
+                  <article className="card soft" key={a.id}>
+                    <p><strong>Name:</strong> {a.name}</p>
+                    <p><strong>Email:</strong> {a.email}</p>
+                    <p><strong>Created At:</strong> {new Date(a.createdAt).toLocaleString()}</p>
+                    <div className="actions-row">
+                      <button className="btn mini icon-only-btn" title="Edit" aria-label="Edit super admin" onClick={() => startEdit("super_admin", a)}><FaEdit aria-hidden="true" /></button>
+                      <button className="btn mini danger icon-only-btn" title="Delete" aria-label="Delete super admin" onClick={() => remove("super_admin", a.id)}><FaTrashAlt aria-hidden="true" /></button>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </section>
 
             {editType ? (
-              <section className="card">
-                <h3>Edit Record ({editType.replace("_", " ")})</h3>
-                <form className="form-grid" onSubmit={saveEdit}>
-                  {Object.keys(editDraft)
-                    .filter((key) => key !== "id" && key !== "role")
-                    .map((key) => (
-                      <label key={key}>
-                        {key}
-                        {key === "photo" || key === "logo" ? (
-                          <>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={async (event) => {
-                                const file = event.target.files?.[0];
-                                if (!file) return;
-                                try {
-                                  const encoded = await fileToDataUrl(file);
-                                  setEditDraft((prev) => ({ ...prev, [key]: encoded }));
-                                } catch (error) {
-                                  setMessage(error.message);
-                                }
-                              }}
-                            />
-                            <ImageThumb src={editDraft[key]} alt={`${key} preview`} />
-                          </>
-                        ) : (
-                          <input
-                            value={editDraft[key] ?? ""}
-                            onChange={(event) =>
-                              setEditDraft((prev) => ({ ...prev, [key]: event.target.value }))
-                            }
-                          />
-                        )}
-                      </label>
-                    ))}
-                  <div className="actions-row">
-                    <button className="btn" type="submit">Save</button>
-                    <button className="btn ghost" type="button" onClick={() => setEditType("")}>Cancel</button>
+              <div className="modal-overlay" role="dialog" aria-modal="true" onClick={closeEditModal}>
+                <section className="modal-card" onClick={(event) => event.stopPropagation()}>
+                  <div className="row space-between modal-head">
+                    <h3>Edit Record ({editType.replace("_", " ")})</h3>
+                    <button className="btn ghost" type="button" onClick={closeEditModal}>Close</button>
                   </div>
-                </form>
-              </section>
+                  <form className="form-grid modal-form-grid" onSubmit={saveEdit}>
+                    {Object.keys(editDraft)
+                      .filter((key) => key !== "id" && key !== "role")
+                      .map((key) => (
+                        <label key={key}>
+                          {key}
+                          {key === "photo" || key === "logo" ? (
+                            <>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={async (event) => {
+                                  const file = event.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    const encoded = await fileToDataUrl(file);
+                                    setEditDraft((prev) => ({ ...prev, [key]: encoded }));
+                                  } catch (error) {
+                                    setMessage(error.message);
+                                  }
+                                }}
+                              />
+                              <ImageThumb src={editDraft[key]} alt={`${key} preview`} />
+                            </>
+                          ) : (
+                            <input value={editDraft[key] ?? ""} onChange={(event) => setEditDraft((prev) => ({ ...prev, [key]: event.target.value }))} />
+                          )}
+                        </label>
+                      ))}
+                    <div className="actions-row field-full">
+                      <button className="btn" type="submit">Save</button>
+                      <button className="btn ghost" type="button" onClick={closeEditModal}>Cancel</button>
+                    </div>
+                  </form>
+                </section>
+              </div>
             ) : null}
           </>
         ) : null}
@@ -581,8 +650,8 @@ export default function DashboardPage() {
             <h3>Player Profile</h3>
             <form className="form-grid" onSubmit={(event) => updateSelf(event, "player")}>
               <label>Name<input name="name" defaultValue={me.name} required /></label>
-              <label>
-                Photo Upload
+              <label className="field-full">
+                          Photo Upload
                 <input
                   name="photoFile"
                   type="file"
@@ -602,6 +671,7 @@ export default function DashboardPage() {
                 <img className="preview-image" src={selfPlayerPhoto || me.photo} alt="Player photo" />
               </div>
               <label>Mobile<input name="mobile" defaultValue={me.mobile} required /></label>
+              <label>Jersey Number<input name="jerseyNumber" defaultValue={me.jerseyNumber || ""} required /></label>
               <label>Jersey Size<input name="jerseySize" defaultValue={me.jerseySize} required /></label>
               <label>Jersey Name<input name="jerseyName" defaultValue={me.jerseyName} required /></label>
               <label>Village<input name="village" defaultValue={me.village} required /></label>
@@ -617,8 +687,8 @@ export default function DashboardPage() {
             <form className="form-grid" onSubmit={(event) => updateSelf(event, "team_owner")}>
               <label>Owner Name<input name="ownerName" defaultValue={me.ownerName} required /></label>
               <label>Team Name<input name="teamName" defaultValue={me.teamName} required /></label>
-              <label>
-                Logo Upload
+              <label className="field-full">
+                          Logo Upload
                 <input
                   name="logoFile"
                   type="file"
@@ -648,10 +718,6 @@ export default function DashboardPage() {
     </main>
   );
 }
-
-
-
-
 
 
 

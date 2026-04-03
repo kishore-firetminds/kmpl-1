@@ -191,6 +191,7 @@ export default function RegisterPage() {
           name: formData.get("name")?.toString().trim(),
           photo: playerPhotoPreview,
           mobile: formData.get("mobile")?.toString().trim(),
+          jerseyNumber: formData.get("jerseyNumber")?.toString().trim(),
           jerseySize: formData.get("jerseySize")?.toString().trim(),
           jerseyName: formData.get("jerseyName")?.toString().trim(),
           village: formData.get("village")?.toString().trim(),
@@ -291,6 +292,7 @@ export default function RegisterPage() {
                   </label>
                   <PreviewCard src={playerPhotoPreview} alt="Player preview" fileName={playerPhotoMeta.fileName} fileSize={playerPhotoMeta.fileSize} />
                   <label>Mobile Number<input required name="mobile" defaultValue={payerPhone} /></label>
+                  <label>Jersey Number<input required name="jerseyNumber" /></label>
                   <label>Jersey Size<input required name="jerseySize" /></label>
                   <label>Jersey Name<input required name="jerseyName" /></label>
                   <label>Village<input required name="village" /></label>
@@ -343,3 +345,4 @@ export default function RegisterPage() {
     </main>
   );
 }
+

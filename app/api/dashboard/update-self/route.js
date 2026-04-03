@@ -26,6 +26,7 @@ export async function POST(request) {
         name: data.name,
         photo: data.photo,
         mobile: data.mobile,
+        jersey_number: data.jerseyNumber,
         jersey_size: data.jerseySize,
         jersey_name: data.jerseyName,
         village: data.village,
@@ -53,3 +54,4 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message || "Unable to update profile." }, { status: 500 });
   }
 }
+

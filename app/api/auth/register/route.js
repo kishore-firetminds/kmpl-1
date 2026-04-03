@@ -70,6 +70,7 @@ export async function POST(request) {
         photo: String(profile.photo || "").trim(),
         email,
         mobile,
+        jerseyNumber: String(profile.jerseyNumber || "").trim(),
         jerseySize: String(profile.jerseySize || "").trim(),
         jerseyName: String(profile.jerseyName || "").trim(),
         village: String(profile.village || "").trim(),
@@ -124,3 +125,4 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message || "Registration failed." }, { status: 500 });
   }
 }
+
