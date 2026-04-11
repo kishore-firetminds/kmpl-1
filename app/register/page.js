@@ -218,7 +218,16 @@ export default function RegisterPage() {
       return;
     }
 
+    event.currentTarget.reset();
+    setPlayerPhotoPreview("");
+    setTeamLogoPreview("");
+    setPlayerPhotoMeta({ fileName: "", fileSize: 0 });
+    setTeamLogoMeta({ fileName: "", fileSize: 0 });
+    setPaymentDone(false);
+    setPaymentRef("");
+
     toast.success("Registration successful.");
+    router.refresh();
     router.push("/dashboard");
   }
 

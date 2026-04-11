@@ -24,7 +24,17 @@ export async function POST(request) {
       row.password = hashPassword(row.password);
     }
 
-    await updateRows(tableByRole(editType), { id: editId }, row);
+    try {
+      await updateRows(tableByRole(editType), { id: editId }, row);
+    } catch (error) {
+      const message = String(error?.message || "");
+      if (editType !== "team_owner" || !message.toLowerCase().includes("jersey_design")) {
+        throw error;
+      }
+      const legacyRow = { ...row };
+      delete legacyRow.jersey_design;
+      await updateRows(tableByRole(editType), { id: editId }, legacyRow);
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error.message || "Unable to update record." }, { status: 500 });

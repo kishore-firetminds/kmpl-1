@@ -39,11 +39,13 @@ export default function LoginPage() {
       if (data.requiresRoleSelection) {
         sessionStorage.setItem("kmpl_pending_roles", JSON.stringify(data.choices || []));
         toast.success("Select your role to continue.");
+        router.refresh();
         router.push("/select-role");
         return;
       }
 
       toast.success("Login successful.");
+      router.refresh();
       router.push("/dashboard");
     } catch (error) {
       toast.error(error.message || "Login failed.");

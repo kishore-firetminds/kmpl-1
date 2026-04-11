@@ -41,11 +41,20 @@ export async function POST(request) {
         owner_name: data.ownerName,
         team_name: data.teamName,
         logo: data.logo,
+        jersey_design: data.jerseyDesign,
         jersey_pattern: data.jerseyPattern,
         owner_mobile: data.ownerMobile,
         password: data.password ? (String(data.password).startsWith("scrypt$") ? data.password : hashPassword(data.password)) : undefined
       });
-      await updateRows("team_owners", { id: currentUser.id }, patch);
+      try {
+        await updateRows("team_owners", { id: currentUser.id }, patch);
+      } catch (error) {
+        const message = String(error?.message || "");
+        if (!message.toLowerCase().includes("jersey_design")) throw error;
+        const legacyPatch = { ...patch };
+        delete legacyPatch.jersey_design;
+        await updateRows("team_owners", { id: currentUser.id }, legacyPatch);
+      }
       return NextResponse.json({ ok: true });
     }
 
