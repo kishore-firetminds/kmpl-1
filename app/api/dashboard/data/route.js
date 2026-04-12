@@ -6,6 +6,7 @@ import { selectRows } from "@/lib/server/supabase";
 
 const FALLBACK_LIMIT = 10;
 const MAX_LIMIT = 25;
+const MAX_PLAYERS_LIMIT = 20000;
 const DEFAULT_LIMIT = 10;
 
 function isTimeoutError(error) {
@@ -96,7 +97,13 @@ export async function GET(request) {
     const only = searchParams.get("only");
 
     const envDefaultLimit = toInt(process.env.DASHBOARD_MAX_ROWS || DEFAULT_LIMIT, DEFAULT_LIMIT, 1, MAX_LIMIT);
-    const playersLimit = toInt(searchParams.get("playersLimit"), envDefaultLimit, 1, MAX_LIMIT);
+    const envPlayersDefaultLimit = toInt(
+      process.env.DASHBOARD_PLAYERS_MAX_ROWS || process.env.DASHBOARD_MAX_ROWS || DEFAULT_LIMIT,
+      DEFAULT_LIMIT,
+      1,
+      MAX_PLAYERS_LIMIT
+    );
+    const playersLimit = toInt(searchParams.get("playersLimit"), envPlayersDefaultLimit, 1, MAX_PLAYERS_LIMIT);
     const teamOwnersLimit = toInt(searchParams.get("teamOwnersLimit"), envDefaultLimit, 1, MAX_LIMIT);
     const superAdminsLimit = toInt(searchParams.get("superAdminsLimit"), envDefaultLimit, 1, MAX_LIMIT);
 
@@ -242,24 +249,23 @@ export async function GET(request) {
       teamOwners = ownerRows.map(fromTeamOwnerRow);
 
       if (settings.showTeamOwnerPlayerList && includesOnly(only, "players")) {
-        const result = await selectRowsPage({
+        const rows = await selectRowsResilient({
           table: "players",
           select: teamOwnerVisiblePlayersSelect,
           fallbackSelect: "id,name,mobile,village,registered_at",
           order: "registered_at.desc",
-          offset: playersOffset,
-          limit: playersLimit,
-          map: (row) => ({
-            id: row.id,
-            name: row.name,
-            photo: row.photo,
-            mobile: row.mobile,
-            village: row.village,
-            registeredAt: row.registered_at
-          })
+          limit: MAX_PLAYERS_LIMIT,
+          offset: 0
         });
-        players = result.rows;
-        pagination.players = { offset: result.nextOffset, limit: playersLimit, hasMore: result.hasMore };
+        players = rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          photo: row.photo,
+          mobile: row.mobile,
+          village: row.village,
+          registeredAt: row.registered_at
+        }));
+        pagination.players = { offset: players.length, limit: players.length || playersLimit, hasMore: false };
       } else {
         pagination.players = { offset: 0, limit: playersLimit, hasMore: false };
       }

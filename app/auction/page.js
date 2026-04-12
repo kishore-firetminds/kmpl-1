@@ -27,12 +27,25 @@ export default function AuctionPage() {
   useEffect(() => {
     let active = true;
 
+    async function forceLogoutToHome() {
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch {
+        // Ignore logout failures while forcing redirect.
+      }
+      router.replace("/");
+    }
+
     async function load() {
       try {
         const meResponse = await fetch("/api/auth/me", { cache: "no-store" });
+        if (meResponse.status === 401) {
+          await forceLogoutToHome();
+          return;
+        }
         const meData = await meResponse.json();
         if (!meResponse.ok || !meData?.user) {
-          router.replace("/login");
+          await forceLogoutToHome();
           return;
         }
         if (meData.user.role !== "team_owner") {
@@ -41,6 +54,10 @@ export default function AuctionPage() {
         }
 
         const settingsResponse = await fetch("/api/settings", { cache: "no-store" });
+        if (settingsResponse.status === 401) {
+          await forceLogoutToHome();
+          return;
+        }
         const settingsData = await settingsResponse.json();
         if (!settingsResponse.ok) {
           throw new Error(settingsData.error || "Unable to load auction settings.");
@@ -111,4 +128,3 @@ export default function AuctionPage() {
     </main>
   );
 }
-

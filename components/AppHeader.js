@@ -16,6 +16,18 @@ export default function AppHeader() {
       try {
         const response = await fetch("/api/auth/me", { cache: "no-store" });
         if (!response.ok) {
+          if (response.status === 401 && ["/dashboard", "/auction"].includes(pathname)) {
+            try {
+              await fetch("/api/auth/logout", { method: "POST" });
+            } catch {
+              // Ignore forced-logout errors.
+            }
+            if (mounted) {
+              setCurrentUser(null);
+              router.replace("/");
+            }
+            return;
+          }
           if (mounted) setCurrentUser(null);
           return;
         }

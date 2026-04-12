@@ -23,9 +23,10 @@ import PasswordField from "@/components/PasswordField";
 import toast from "react-hot-toast";
 
 const PAGE_SIZE = 100;
+const PLAYERS_LIMIT = 5000;
 
 const DEFAULT_PAGINATION = {
-  players: { offset: 0, limit: PAGE_SIZE, hasMore: false },
+  players: { offset: 0, limit: PLAYERS_LIMIT, hasMore: false },
   teamOwners: { offset: 0, limit: PAGE_SIZE, hasMore: false },
   superAdmins: { offset: 0, limit: PAGE_SIZE, hasMore: false }
 };
@@ -117,16 +118,25 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function forceLogoutToHome() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore logout API failures on forced client redirect.
+    }
+    setCurrentUserState(null);
+    router.replace("/");
+  }
+
   async function refresh(firstLoad = false, showErrors = true) {
     try {
       const makeUrl = (only) =>
-        `/api/dashboard/data?ts=${Date.now()}&only=${only}&playersLimit=${PAGE_SIZE}&teamOwnersLimit=${PAGE_SIZE}&superAdminsLimit=${PAGE_SIZE}`;
+        `/api/dashboard/data?ts=${Date.now()}&only=${only}&playersLimit=${PLAYERS_LIMIT}&teamOwnersLimit=${PAGE_SIZE}&superAdminsLimit=${PAGE_SIZE}`;
 
       const playersResponse = await fetch(makeUrl("players"), { cache: "no-store" });
       if (!playersResponse.ok) {
         if (playersResponse.status === 401) {
-          setCurrentUserState(null);
-          router.replace("/login");
+          await forceLogoutToHome();
           return false;
         }
 
@@ -143,8 +153,7 @@ export default function DashboardPage() {
 
       const playersData = await playersResponse.json();
       if (!playersData.currentUser) {
-        setCurrentUserState(null);
-        if (firstLoad) router.replace("/login");
+        await forceLogoutToHome();
         return false;
       }
 
@@ -287,6 +296,10 @@ export default function DashboardPage() {
           auctionDate: auctionDate ? new Date(auctionDate).toISOString() : null
         })
       });
+      if (response.status === 401) {
+        await forceLogoutToHome();
+        return;
+      }
       const result = await response.json();
       if (!response.ok || !result?.ok) {
         setMessage(result?.error || "Unable to save settings.");
@@ -305,6 +318,7 @@ export default function DashboardPage() {
 
   async function loadMore(section) {
     if (!currentUser) return;
+    if (section === "players") return;
 
     const keyMap = {
       players: "players",
@@ -314,13 +328,13 @@ export default function DashboardPage() {
     const sectionKey = keyMap[section];
     if (!sectionKey) return;
 
-    const pager = pagination[sectionKey] || { offset: 0, limit: PAGE_SIZE, hasMore: false };
+    const pager = pagination[sectionKey] || { offset: 0, limit: section === "players" ? PLAYERS_LIMIT : PAGE_SIZE, hasMore: false };
     if (!pager.hasMore) return;
 
     try {
       const query = new URLSearchParams({
         only: section,
-        playersLimit: String(PAGE_SIZE),
+        playersLimit: String(PLAYERS_LIMIT),
         teamOwnersLimit: String(PAGE_SIZE),
         superAdminsLimit: String(PAGE_SIZE),
         playersOffset: String(section === "players" ? pager.offset : 0),
@@ -330,6 +344,10 @@ export default function DashboardPage() {
       });
 
       const response = await fetch(`/api/dashboard/data?${query.toString()}`, { cache: "no-store" });
+      if (response.status === 401) {
+        await forceLogoutToHome();
+        return;
+      }
       const data = await response.json();
       if (!response.ok) {
         setMessage(data.error || "Unable to load more records.");
@@ -438,6 +456,10 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ editType, editId, editDraft })
       });
+      if (response.status === 401) {
+        await forceLogoutToHome();
+        return;
+      }
 
       const data = await response.json();
       if (!response.ok) {
@@ -461,6 +483,10 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, id })
       });
+      if (response.status === 401) {
+        await forceLogoutToHome();
+        return;
+      }
 
       const data = await response.json();
       if (!response.ok) {
@@ -482,16 +508,19 @@ export default function DashboardPage() {
       return;
     }
 
-    const headers = ["Photo", "Name", "Mobile", "Village", "Jersey Name"];
+    const headers = ["Name", "Mobile", "Village", "Jersey Name"];
 
     const escapeCsv = (value) => {
       const text = String(value ?? "").replace(/"/g, '""');
       return `"${text}"`;
     };
 
-    const rows = sortedPlayers.map((player) =>
+    const alphabeticalPlayers = [...sortedPlayers].sort((a, b) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { sensitivity: "base" })
+    );
+
+    const rows = alphabeticalPlayers.map((player) =>
       [
-        player.photo,
         player.name,
         player.mobile,
         player.village,
@@ -572,6 +601,10 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ createRole, data })
       });
+      if (response.status === 401) {
+        await forceLogoutToHome();
+        return;
+      }
 
       const result = await response.json();
       if (!response.ok || !result?.ok) {
@@ -623,6 +656,10 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role, data })
       });
+      if (response.status === 401) {
+        await forceLogoutToHome();
+        return;
+      }
 
       const result = await response.json();
       if (!response.ok) {
@@ -849,7 +886,7 @@ export default function DashboardPage() {
                 <h3 className="section-title"><FaUsers aria-hidden="true" /><span>Players Table ({sortedPlayers.length})</span></h3>
                 <div className="actions-row">
                   <button className="btn" type="button" onClick={() => openCreateModal("player")}>Create Player</button>
-                  <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}><FaDownload aria-hidden="true" /><span>Download Players CSV</span></button>
+                  <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}><FaDownload aria-hidden="true" /><span>Download Players List</span></button>
                 </div>
               </div>
               <div className="desktop-table">
@@ -895,13 +932,6 @@ export default function DashboardPage() {
                   </article>
                 ))}
               </div>
-              {pagination.players?.hasMore ? (
-                <div className="actions-row" style={{ marginTop: "12px" }}>
-                  <button className="btn ghost" type="button" onClick={() => loadMore("players")}>
-                    Load More Players
-                  </button>
-                </div>
-              ) : null}
             </section>
 
             <section className="card">
@@ -1067,7 +1097,7 @@ export default function DashboardPage() {
         {currentUser.role === "player" && me ? (
           <section className="card">
             <h3>Player Profile</h3>
-            <form className="form-grid" onSubmit={(event) => updateSelf(event, "player")}>
+            <form className="form-grid profile-form-grid" onSubmit={(event) => updateSelf(event, "player")}>
               <label>Name<input name="name" defaultValue={me.name} required /></label>
               <label className="field-full">
                           Photo Upload
@@ -1086,7 +1116,7 @@ export default function DashboardPage() {
                   }}
                 />
               </label>
-              <div className="preview-card">
+              <div className="preview-card field-full">
                 <img className="preview-image" src={selfPlayerPhoto || me.photo} alt="Player photo" />
               </div>
               <label>Mobile<input name="mobile" defaultValue={me.mobile} required /></label>
@@ -1102,8 +1132,18 @@ export default function DashboardPage() {
 
         {currentUser.role === "team_owner" && me ? (
           <section className="card">
-            <h3>Team Owner Profile</h3>
-            <form className="form-grid" onSubmit={(event) => updateSelf(event, "team_owner")}>
+            <div className="row space-between">
+              <h3>Team Owner Profile</h3>
+              <div className="actions-row">
+                {settings.auctionDate ? (
+                  <button className="btn icon-btn" type="button" onClick={() => router.push("/auction")}>
+                    <FaGavel aria-hidden="true" />
+                    <span>Participate in Auction</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <form className="form-grid profile-form-grid" onSubmit={(event) => updateSelf(event, "team_owner")}>
               <label>Owner Name<input name="ownerName" defaultValue={me.ownerName} required /></label>
               <label>Team Name<input name="teamName" defaultValue={me.teamName} required /></label>
               <label className="field-full">
@@ -1123,7 +1163,7 @@ export default function DashboardPage() {
                   }}
                 />
               </label>
-              <div className="preview-card">
+              <div className="preview-card field-full">
                 <img className="preview-image" src={selfTeamLogo || me.logo} alt="Team logo" />
               </div>
               <label className="field-full">
@@ -1143,7 +1183,7 @@ export default function DashboardPage() {
                   }}
                 />
               </label>
-              <div className="preview-card">
+              <div className="preview-card field-full">
                 <img className="preview-image" src={selfTeamJerseyDesign || me.jerseyDesign} alt="Jersey design" />
               </div>
               <label>Jersey Pattern<input name="jerseyPattern" defaultValue={me.jerseyPattern} required /></label>
@@ -1151,22 +1191,20 @@ export default function DashboardPage() {
               <label>Password<PasswordField name="password" required /></label>
               <button className="btn" type="submit">Update Team Profile</button>
             </form>
-            {settings.auctionDate ? (
-              <div className="actions-row" style={{ marginTop: "14px" }}>
-                <button className="btn icon-btn" type="button" onClick={() => router.push("/auction")}>
-                  <FaGavel aria-hidden="true" />
-                  <span>Participate in Auction</span>
-                </button>
-              </div>
-            ) : null}
           </section>
         ) : null}
         {currentUser.role === "team_owner" && settings.showTeamOwnerPlayerList ? (
           <section className="card">
-            <h3 className="section-title">
-              <FaUsers aria-hidden="true" />
-              <span>Players List ({sortedPlayers.length})</span>
-            </h3>
+            <div className="row space-between">
+              <h3 className="section-title">
+                <FaUsers aria-hidden="true" />
+                <span>Players List ({sortedPlayers.length})</span>
+              </h3>
+              <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}>
+                <FaDownload aria-hidden="true" />
+                <span>Download Players List</span>
+              </button>
+            </div>
             <div className="desktop-table">
               <table>
                 <thead>
@@ -1205,21 +1243,9 @@ export default function DashboardPage() {
                 </article>
               ))}
             </div>
-            {pagination.players?.hasMore ? (
-              <div className="actions-row" style={{ marginTop: "12px" }}>
-                <button className="btn ghost" type="button" onClick={() => loadMore("players")}>
-                  Load More Players
-                </button>
-              </div>
-            ) : null}
           </section>
         ) : null}
       </div>
     </main>
   );
 }
-
-
-
-
-
