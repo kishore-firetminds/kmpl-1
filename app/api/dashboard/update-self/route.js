@@ -37,9 +37,10 @@ export async function POST(request) {
     }
 
     if (role === "team_owner") {
+      const nextTeamName = String(data.teamName || "").trim();
       const patch = cleanPatch({
         owner_name: data.ownerName,
-        team_name: data.teamName,
+        team_name: nextTeamName,
         logo: data.logo,
         jersey_design: data.jerseyDesign,
         jersey_pattern: data.jerseyPattern,
@@ -54,6 +55,9 @@ export async function POST(request) {
         const legacyPatch = { ...patch };
         delete legacyPatch.jersey_design;
         await updateRows("team_owners", { id: currentUser.id }, legacyPatch);
+      }
+      if (nextTeamName) {
+        await updateRows("players", { assigned_team_owner_id: currentUser.id }, { assigned_team_name: nextTeamName });
       }
       return NextResponse.json({ ok: true });
     }

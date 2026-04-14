@@ -12,6 +12,9 @@ create table if not exists public.players (
   jersey_size text,
   jersey_name text,
   village text,
+  assigned_team_owner_id text,
+  assigned_team_name text,
+  player_points integer not null default 0,
   password text not null,
   fee_paid integer not null default 310,
   payment_ref text,
@@ -34,6 +37,7 @@ create table if not exists public.team_owners (
   email text,
   jersey_pattern text,
   owner_mobile text not null,
+  auction_budget integer not null default 100000,
   password text not null,
   fee_paid integer not null default 5100,
   payment_ref text,
@@ -73,5 +77,9 @@ create table if not exists public.app_settings (
 
 -- Migration for existing DBs:
 alter table public.players add column if not exists jersey_number text;
+alter table public.players add column if not exists assigned_team_owner_id text;
+alter table public.players add column if not exists assigned_team_name text;
+alter table public.players add column if not exists player_points integer not null default 0;
 alter table public.team_owners add column if not exists jersey_design text;
+alter table public.team_owners add column if not exists auction_budget integer not null default 100000;
 

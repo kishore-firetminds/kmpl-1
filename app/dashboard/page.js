@@ -36,17 +36,28 @@ function ImageThumb({ src, alt }) {
   return <img className="table-image" src={src} alt={alt} />;
 }
 
+function isExternalUrl(value) {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+
 function ImageThumbWithPreview({ src, alt, onPreview }) {
   if (!src) return <span>-</span>;
+  const externalUrl = isExternalUrl(src);
   return (
     <div className="thumb-wrap">
       <img className="table-image" src={src} alt={alt} />
       <button
         className="thumb-badge"
         type="button"
-        title="View image"
-        aria-label="View image"
-        onClick={() => onPreview(src, alt)}
+        title={externalUrl ? "Open image link" : "View image"}
+        aria-label={externalUrl ? "Open image link" : "View image"}
+        onClick={() => {
+          if (externalUrl) {
+            window.open(src, "_blank", "noopener,noreferrer");
+            return;
+          }
+          onPreview(src, alt);
+        }}
       >
         <FaEye aria-hidden="true" />
       </button>
@@ -57,7 +68,29 @@ function ImageThumbWithPreview({ src, alt, onPreview }) {
 function getPaymentStatus(paymentRef) {
   if (!paymentRef) return "PENDING";
   if (paymentRef === "ADMIN_CREATED") return "ADMIN_CREATED";
+  if (paymentRef === "IMPORTED") return "IMPORTED";
   return "PAID";
+}
+
+function formatPoints(value) {
+  return new Intl.NumberFormat("en-IN").format(Number(value || 0));
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function shuffleItems(items) {
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
 }
 
 function fileToDataUrl(file) {
@@ -75,6 +108,9 @@ export default function DashboardPage() {
   const [players, setPlayers] = useState([]);
   const [teamOwners, setTeamOwners] = useState([]);
   const [superAdmins, setSuperAdmins] = useState([]);
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [auctionList, setAuctionList] = useState([]);
+  const [teamSummary, setTeamSummary] = useState(null);
   const [settings, setSettings] = useState({
     showTeamOwnerPlayerList: false,
     auctionDate: null
@@ -159,6 +195,7 @@ export default function DashboardPage() {
 
       setCurrentUserState(playersData.currentUser);
       setSettings(playersData.settings || { showTeamOwnerPlayerList: false, auctionDate: null });
+      setTeamSummary(playersData.teamSummary || null);
 
       if (playersData.currentUser.role === "super_admin") {
         const [ownersResponse, adminsResponse] = await Promise.all([
@@ -177,6 +214,7 @@ export default function DashboardPage() {
           teamOwners: ownersData.pagination?.teamOwners || DEFAULT_PAGINATION.teamOwners,
           superAdmins: adminsData.pagination?.superAdmins || DEFAULT_PAGINATION.superAdmins
         });
+        setTeamSummary(null);
       } else {
         setPlayers(playersData.players || []);
         setTeamOwners(playersData.teamOwners || []);
@@ -206,6 +244,15 @@ export default function DashboardPage() {
       ),
     [players]
   );
+  const filteredAdminPlayers = useMemo(() => {
+    const query = String(playerSearch || "").trim().toLowerCase();
+    if (!query) return sortedPlayers;
+    return sortedPlayers.filter((player) => {
+      const name = String(player.name || "").toLowerCase();
+      const mobile = String(player.mobile || "").toLowerCase();
+      return name.includes(query) || mobile.includes(query);
+    });
+  }, [playerSearch, sortedPlayers]);
   const sortedTeamOwners = useMemo(
     () =>
       [...teamOwners].sort(
@@ -219,6 +266,10 @@ export default function DashboardPage() {
         (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       ),
     [superAdmins]
+  );
+  const teamOwnerOptions = useMemo(
+    () => [...teamOwners].sort((a, b) => String(a.teamName || "").localeCompare(String(b.teamName || ""), undefined, { sensitivity: "base" })),
+    [teamOwners]
   );
 
   function openCreateModal(role) {
@@ -384,6 +435,9 @@ export default function DashboardPage() {
         jerseySize: draft.jerseySize || item.jerseySize || item.jersey_size || "",
         jerseyName: draft.jerseyName || item.jerseyName || item.jersey_name || "",
         village: draft.village || item.village || "",
+        assignedTeamOwnerId: draft.assignedTeamOwnerId || item.assignedTeamOwnerId || item.assigned_team_owner_id || "",
+        assignedTeamName: draft.assignedTeamName || item.assignedTeamName || item.assigned_team_name || "",
+        playerPoints: Number(item.playerPoints ?? item.player_points ?? 0),
         feePaid: Number(item.feePaid ?? item.fee_paid ?? 310),
         paymentRef: item.paymentRef || item.payment_ref || "ADMIN_CREATED",
         registeredAt: item.registeredAt || item.registered_at || new Date().toISOString()
@@ -404,6 +458,7 @@ export default function DashboardPage() {
         email: draft.email || item.email || "",
         jerseyPattern: draft.jerseyPattern || item.jerseyPattern || item.jersey_pattern || "",
         ownerMobile: draft.ownerMobile || item.ownerMobile || item.owner_mobile || "",
+        auctionBudget: Number(item.auctionBudget ?? item.auction_budget ?? 100000),
         feePaid: Number(item.feePaid ?? item.fee_paid ?? 5100),
         paymentRef: item.paymentRef || item.payment_ref || "ADMIN_CREATED",
         registeredAt: item.registeredAt || item.registered_at || new Date().toISOString()
@@ -447,14 +502,24 @@ export default function DashboardPage() {
     setSuperAdmins((prev) => prev.filter((a) => a.id !== id));
   }
 
+  function buildEditPayload() {
+    if (editType !== "player") return editDraft;
+    return {
+      ...editDraft,
+      assignedTeamOwnerId: String(editDraft.assignedTeamOwnerId || "").trim(),
+      playerPoints: Number(editDraft.playerPoints || 0)
+    };
+  }
+
   async function saveEdit(event) {
     event.preventDefault();
     if (!editType || !editId) return;
     try {
+      const payload = buildEditPayload();
       const response = await fetch("/api/dashboard/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ editType, editId, editDraft })
+        body: JSON.stringify({ editType, editId, editDraft: payload })
       });
       if (response.status === 401) {
         await forceLogoutToHome();
@@ -467,7 +532,7 @@ export default function DashboardPage() {
         return;
       }
 
-      applyLocalUpdate(editType, editId, editDraft);
+      applyLocalUpdate(editType, editId, payload);
       await refresh(false, true);
       closeEditModal();
       setMessage("Record updated.");
@@ -508,7 +573,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const headers = ["Name", "Mobile", "Village", "Jersey Name"];
+    const headers = ["Name", "Mobile", "Village", "Jersey Name", "Assigned Team", "Player Points"];
 
     const escapeCsv = (value) => {
       const text = String(value ?? "").replace(/"/g, '""');
@@ -524,7 +589,9 @@ export default function DashboardPage() {
         player.name,
         player.mobile,
         player.village,
-        player.jerseyName
+        player.jerseyName,
+        player.assignedTeamName,
+        player.playerPoints
       ].map(escapeCsv).join(",")
     );
 
@@ -540,6 +607,154 @@ export default function DashboardPage() {
     link.remove();
     URL.revokeObjectURL(url);
   }
+
+  function buildAuctionList() {
+    if (!sortedPlayers.length) {
+      throw new Error("No players found to prepare the auction list.");
+    }
+
+    const fixedRequests = [
+      { position: 0, name: "Hemanth", mobile: "9390567662" },
+      { position: 2, name: "kishore", mobile: "7981067942" },
+      { position: 4, name: "dinesh", mobile: "7989132231" },
+      { position: 6, name: "sasi", mobile: "6304727537" },
+      { position: 8, name: "yugandhar", mobile: "9390567662" },
+      { position: 10, name: "Padmanabha Reddy", mobile: "98765" },
+      { position: 12, name: "Harish", mobile: "987659" }
+    ];
+    const lastFourthRequest = { fromEnd: 4, name: "Naveen Roman", mobile: "7989126693" };
+
+    if (sortedPlayers.length < 14) {
+      throw new Error("At least 14 players are required to prepare this auction order.");
+    }
+
+    const availablePlayers = [...sortedPlayers];
+    const takePlayer = ({ name, mobile }) => {
+      const targetName = normalizeText(name);
+      const targetMobile = normalizePhone(mobile);
+      const playerEntries = availablePlayers.map((player, index) => ({ player, index }));
+      let matches = targetMobile
+        ? playerEntries.filter(({ player }) => normalizePhone(player.mobile) === targetMobile)
+        : [];
+
+      if (matches.length > 1 && targetName) {
+        const exactNameMatches = matches.filter(({ player }) => normalizeText(player.name) === targetName);
+        if (exactNameMatches.length === 1) matches = exactNameMatches;
+      }
+
+      if (matches.length > 1 && targetName) {
+        const looseNameMatches = matches.filter(({ player }) => {
+          const playerName = normalizeText(player.name);
+          return playerName.includes(targetName) || targetName.includes(playerName);
+        });
+        if (looseNameMatches.length === 1) matches = looseNameMatches;
+      }
+
+      if (!matches.length && targetName) {
+        matches = playerEntries.filter(({ player }) => normalizeText(player.name) === targetName);
+      }
+
+      if (!matches.length && targetName) {
+        const looseNameMatches = playerEntries.filter(({ player }) => {
+          const playerName = normalizeText(player.name);
+          return playerName.includes(targetName) || targetName.includes(playerName);
+        });
+        if (looseNameMatches.length === 1) matches = looseNameMatches;
+      }
+
+      const playerIndex = matches.length === 1 ? matches[0].index : -1;
+
+      if (playerIndex === -1) {
+        throw new Error(`Required player not found: ${name} (${mobile})`);
+      }
+      return availablePlayers.splice(playerIndex, 1)[0];
+    };
+
+    const totalPlayers = sortedPlayers.length;
+    const slots = new Array(totalPlayers).fill(null);
+
+    for (const request of fixedRequests) {
+      if (slots[request.position]) {
+        throw new Error("Auction slot conflict detected.");
+      }
+      slots[request.position] = { ...takePlayer(request), auctionSlotType: "Fixed" };
+    }
+
+    const fourthFromLastIndex = totalPlayers - lastFourthRequest.fromEnd;
+    if (fourthFromLastIndex < 0 || fourthFromLastIndex >= totalPlayers) {
+      throw new Error("Unable to place the 4th-from-last auction record.");
+    }
+    if (slots[fourthFromLastIndex]) {
+      throw new Error("4th-from-last auction slot conflicts with the fixed odd-slot players.");
+    }
+    slots[fourthFromLastIndex] = { ...takePlayer(lastFourthRequest), auctionSlotType: "Fixed" };
+
+    const randomizedPlayers = shuffleItems(availablePlayers).map((player) => ({
+      ...player,
+      auctionSlotType: "Random"
+    }));
+
+    let randomIndex = 0;
+    for (let index = 0; index < slots.length; index += 1) {
+      if (slots[index]) continue;
+      slots[index] = randomizedPlayers[randomIndex];
+      randomIndex += 1;
+    }
+
+    const finalList = slots.map((player, index) => ({
+      serialNumber: index + 1,
+      ...player
+    }));
+console.log(finalList)
+    return finalList
+  }
+
+  function generateAuctionList() {
+    try {
+      const nextAuctionList = buildAuctionList();
+      setAuctionList(nextAuctionList);
+      setMessage("Auction list prepared.");
+    } catch (error) {
+      setMessage(error.message || "Unable to prepare auction list.");
+    }
+  }
+
+  function downloadAuctionListCsv() {
+    if (!auctionList.length) {
+      setMessage("Generate the auction list before downloading it.");
+      return;
+    }
+
+    const headers = ["Serial No", "Name", "Mobile", "Village", "Jersey Name", "Slot Type"];
+    const escapeCsv = (value) => {
+      const text = String(value ?? "").replace(/"/g, '""');
+      return `"${text}"`;
+    };
+
+    const rows = auctionList.map((player) =>
+      [
+        player.serialNumber,
+        player.name,
+        player.mobile,
+        player.village,
+        player.jerseyName,
+        player.auctionSlotType
+      ].map(escapeCsv).join(",")
+    );
+
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const datePart = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `kmpl-auction-list-${datePart}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function createByAdmin(event) {
     event.preventDefault();
     if (creating) return;
@@ -855,14 +1070,6 @@ export default function DashboardPage() {
                 <span>Tournament Settings</span>
               </h3>
               <form className="form-grid" onSubmit={saveSettings}>
-                <label className="switch-row">
-                  <input
-                    name="showTeamOwnerPlayerList"
-                    type="checkbox"
-                    defaultChecked={Boolean(settings.showTeamOwnerPlayerList)}
-                  />
-                  <span>Allow Team Owners to view Players list</span>
-                </label>
                 <label>
                   <span className="icon-inline">
                     <FaCalendarAlt aria-hidden="true" />
@@ -881,25 +1088,74 @@ export default function DashboardPage() {
               </form>
             </section>
 
+            {/* <section className="card">
+              <div className="row space-between">
+                <h3 className="section-title">
+                  <FaGavel aria-hidden="true" />
+                  <span>Auction List</span>
+                </h3>
+                <div className="actions-row">
+                  <button className="btn" type="button" onClick={generateAuctionList}>Generate Auction List</button>
+                  <button className="btn ghost icon-btn" type="button" onClick={downloadAuctionListCsv}>
+                    <FaDownload aria-hidden="true" />
+                    <span>Download Auction List</span>
+                  </button>
+                </div>
+              </div>
+              {auctionList.length ? (
+                <div className="desktop-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Serial No</th><th>Name</th><th>Mobile</th><th>Village</th><th>Jersey Name</th><th>Slot Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auctionList.map((player) => (
+                        <tr key={`${player.id}-${player.serialNumber}`}>
+                          <td>{player.serialNumber}</td>
+                          <td>{player.name}</td>
+                          <td>{player.mobile || "-"}</td>
+                          <td>{player.village || "-"}</td>
+                          <td>{player.jerseyName || "-"}</td>
+                          <td>{player.auctionSlotType}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted">Generate the auction list to preview it here.</p>
+              )}
+            </section> */}
+
             <section className="card">
               <div className="row space-between">
-                <h3 className="section-title"><FaUsers aria-hidden="true" /><span>Players Table ({sortedPlayers.length})</span></h3>
+                <h3 className="section-title"><FaUsers aria-hidden="true" /><span>Players Table ({filteredAdminPlayers.length})</span></h3>
                 <div className="actions-row">
                   <button className="btn" type="button" onClick={() => openCreateModal("player")}>Create Player</button>
                   <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}><FaDownload aria-hidden="true" /><span>Download Players List</span></button>
                 </div>
               </div>
+              <div className="actions-row" style={{ marginBottom: "12px" }}>
+                <input
+                  type="search"
+                  placeholder="Search by name or mobile"
+                  value={playerSearch}
+                  onChange={(event) => setPlayerSearch(event.target.value)}
+                />
+              </div>
               <div className="desktop-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Name</th><th>Photo</th><th>Mobile</th><th>Person ID</th><th>Email</th><th>Jersey Number</th><th>Jersey Size</th><th>Jersey Name</th><th>Village</th><th>Fee</th><th>Payment Ref</th><th>Payment Status</th><th>Actions</th>
+                      <th>Name</th><th>Photo</th><th>Mobile</th><th>Email</th><th>Jersey Name</th><th>Village</th><th>Assigned Team</th><th>Player Points</th><th>Fee</th><th>Payment Status</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedPlayers.map((p) => (
+                    {filteredAdminPlayers.map((p) => (
                       <tr key={p.id}>
-                        <td>{p.name}</td><td className="photo-cell"><ImageThumbWithPreview src={p.photo} alt={`${p.name} photo`} onPreview={openImagePreview} /></td><td>{p.mobile}</td><td>{p.personId || "-"}</td><td>{p.email || "-"}</td><td>{p.jerseyNumber || "-"}</td><td>{p.jerseySize}</td><td>{p.jerseyName}</td><td>{p.village}</td><td>{p.feePaid}</td><td>{p.paymentRef}</td><td>{getPaymentStatus(p.paymentRef)}</td>
+                        <td>{p.name}</td><td className="photo-cell"><ImageThumbWithPreview src={p.photo} alt={`${p.name} photo`} onPreview={openImagePreview} /></td><td>{p.mobile}</td><td>{p.email || "-"}</td><td>{p.jerseyName}</td><td>{p.village}</td><td>{p.assignedTeamName || "-"}</td><td>{formatPoints(p.playerPoints)}</td><td>{p.paymentRef}</td><td>{getPaymentStatus(p.paymentRef)}</td>
                         <td className="actions-cell">
                           <button className="btn mini icon-only-btn" title="Edit" aria-label="Edit player" onClick={() => startEdit("player", p)}><FaEdit aria-hidden="true" /></button>
                           <button className="btn mini danger icon-only-btn" title="Delete" aria-label="Delete player" onClick={() => remove("player", p.id)}><FaTrashAlt aria-hidden="true" /></button>
@@ -909,9 +1165,10 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
+              {!filteredAdminPlayers.length ? <p className="muted">No players matched your search.</p> : null}
 
               <div className="mobile-cards">
-                {sortedPlayers.map((p) => (
+                {filteredAdminPlayers.map((p) => (
                   <article className="card soft" key={p.id}>
                     <p><strong>Name:</strong> {p.name}</p>
                     <p><strong>Photo:</strong> <ImageThumbWithPreview src={p.photo} alt={`${p.name} photo`} onPreview={openImagePreview} /></p>
@@ -922,6 +1179,8 @@ export default function DashboardPage() {
                     <p><strong>Jersey Size:</strong> {p.jerseySize}</p>
                     <p><strong>Jersey Name:</strong> {p.jerseyName}</p>
                     <p><strong>Village:</strong> {p.village}</p>
+                    <p><strong>Assigned Team:</strong> {p.assignedTeamName || "-"}</p>
+                    <p><strong>Player Points:</strong> {formatPoints(p.playerPoints)}</p>
                     <p><strong>Fee:</strong> {p.feePaid}</p>
                     <p><strong>Payment Ref:</strong> {p.paymentRef}</p>
                     <p><strong>Payment Status:</strong> {getPaymentStatus(p.paymentRef)}</p>
@@ -943,13 +1202,13 @@ export default function DashboardPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Owner Name</th><th>Logo</th><th>Jersey Design</th><th>Mobile</th><th>Person ID</th><th>Email</th><th>Team Name</th><th>Jersey Pattern</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
+                      <th>Owner Name</th><th>Logo</th><th>Jersey Design</th><th>Mobile</th><th>Person ID</th><th>Email</th><th>Team Name</th><th>Jersey Pattern</th><th>Auction Budget</th><th>Fee</th><th>Payment Ref</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedTeamOwners.map((t) => (
                       <tr key={t.id}>
-                        <td>{t.ownerName}</td><td className="photo-cell"><ImageThumbWithPreview src={t.logo} alt={`${t.teamName} logo`} onPreview={openImagePreview} /></td><td className="photo-cell"><ImageThumbWithPreview src={t.jerseyDesign} alt={`${t.teamName} jersey design`} onPreview={openImagePreview} /></td><td>{t.ownerMobile}</td><td>{t.personId || "-"}</td><td>{t.email || "-"}</td><td>{t.teamName}</td><td>{t.jerseyPattern}</td><td>{t.feePaid}</td><td>{t.paymentRef}</td>
+                        <td>{t.ownerName}</td><td className="photo-cell"><ImageThumbWithPreview src={t.logo} alt={`${t.teamName} logo`} onPreview={openImagePreview} /></td><td className="photo-cell"><ImageThumbWithPreview src={t.jerseyDesign} alt={`${t.teamName} jersey design`} onPreview={openImagePreview} /></td><td>{t.ownerMobile}</td><td>{t.personId || "-"}</td><td>{t.email || "-"}</td><td>{t.teamName}</td><td>{t.jerseyPattern}</td><td>{formatPoints(t.auctionBudget)}</td><td>{t.feePaid}</td><td>{t.paymentRef}</td>
                         <td className="actions-cell">
                           <button className="btn mini icon-only-btn" title="Edit" aria-label="Edit team owner" onClick={() => startEdit("team_owner", t)}><FaEdit aria-hidden="true" /></button>
                           <button className="btn mini danger icon-only-btn" title="Delete" aria-label="Delete team owner" onClick={() => remove("team_owner", t.id)}><FaTrashAlt aria-hidden="true" /></button>
@@ -971,6 +1230,7 @@ export default function DashboardPage() {
                     <p><strong>Email:</strong> {t.email || "-"}</p>
                     <p><strong>Team Name:</strong> {t.teamName}</p>
                     <p><strong>Jersey Pattern:</strong> {t.jerseyPattern}</p>
+                    <p><strong>Auction Budget:</strong> {formatPoints(t.auctionBudget)}</p>
                     <p><strong>Fee:</strong> {t.feePaid}</p>
                     <p><strong>Payment Ref:</strong> {t.paymentRef}</p>
                     <div className="actions-row">
@@ -1043,34 +1303,96 @@ export default function DashboardPage() {
                     <button className="btn ghost" type="button" onClick={closeEditModal}>Close</button>
                   </div>
                   <form className="form-grid modal-form-grid" onSubmit={saveEdit}>
-                    {Object.keys(editDraft)
-                      .filter((key) => key !== "id" && key !== "role")
-                      .map((key) => (
-                        <label key={key}>
-                          {key}
-                          {key === "photo" || key === "logo" || key === "jerseyDesign" ? (
-                            <>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={async (event) => {
-                                  const file = event.target.files?.[0];
-                                  if (!file) return;
-                                  try {
-                                    const encoded = await fileToDataUrl(file);
-                                    setEditDraft((prev) => ({ ...prev, [key]: encoded }));
-                                  } catch (error) {
-                                    setMessage(error.message);
-                                  }
-                                }}
-                              />
-                              <ImageThumb src={editDraft[key]} alt={`${key} preview`} />
-                            </>
-                          ) : (
-                            <input value={editDraft[key] ?? ""} onChange={(event) => setEditDraft((prev) => ({ ...prev, [key]: event.target.value }))} />
-                          )}
+                    {editType === "player" ? (
+                      <>
+                        {Object.keys(editDraft)
+                          .filter((key) => !["id", "role", "assignedTeamName", "assignedTeamOwnerId", "playerPoints"].includes(key))
+                          .map((key) => (
+                            <label key={key}>
+                              {key}
+                              {key === "photo" ? (
+                                <>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={async (event) => {
+                                      const file = event.target.files?.[0];
+                                      if (!file) return;
+                                      try {
+                                        const encoded = await fileToDataUrl(file);
+                                        setEditDraft((prev) => ({ ...prev, [key]: encoded }));
+                                      } catch (error) {
+                                        setMessage(error.message);
+                                      }
+                                    }}
+                                  />
+                                  <ImageThumb src={editDraft[key]} alt={`${key} preview`} />
+                                </>
+                              ) : (
+                                <input value={editDraft[key] ?? ""} onChange={(event) => setEditDraft((prev) => ({ ...prev, [key]: event.target.value }))} />
+                              )}
+                            </label>
+                          ))}
+                        <label>
+                          Assigned Team
+                          <select
+                            value={editDraft.assignedTeamOwnerId || ""}
+                            onChange={(event) => {
+                              const owner = teamOwnerOptions.find((item) => item.id === event.target.value);
+                              setEditDraft((prev) => ({
+                                ...prev,
+                                assignedTeamOwnerId: event.target.value,
+                                assignedTeamName: owner?.teamName || ""
+                              }));
+                            }}
+                          >
+                            <option value="">Unassigned</option>
+                            {teamOwnerOptions.map((owner) => (
+                              <option key={owner.id} value={owner.id}>{owner.teamName}</option>
+                            ))}
+                          </select>
                         </label>
-                      ))}
+                        <label>
+                          Player Points
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={editDraft.playerPoints ?? 0}
+                            onChange={(event) => setEditDraft((prev) => ({ ...prev, playerPoints: event.target.value }))}
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      Object.keys(editDraft)
+                        .filter((key) => key !== "id" && key !== "role")
+                        .map((key) => (
+                          <label key={key}>
+                            {key}
+                            {key === "photo" || key === "logo" || key === "jerseyDesign" ? (
+                              <>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={async (event) => {
+                                    const file = event.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      const encoded = await fileToDataUrl(file);
+                                      setEditDraft((prev) => ({ ...prev, [key]: encoded }));
+                                    } catch (error) {
+                                      setMessage(error.message);
+                                    }
+                                  }}
+                                />
+                                <ImageThumb src={editDraft[key]} alt={`${key} preview`} />
+                              </>
+                            ) : (
+                              <input value={editDraft[key] ?? ""} onChange={(event) => setEditDraft((prev) => ({ ...prev, [key]: event.target.value }))} />
+                            )}
+                          </label>
+                        ))
+                    )}
                     <div className="actions-row field-full">
                       <button className="btn" type="submit">Save</button>
                       <button className="btn ghost" type="button" onClick={closeEditModal}>Cancel</button>
@@ -1131,119 +1453,145 @@ export default function DashboardPage() {
         ) : null}
 
         {currentUser.role === "team_owner" && me ? (
-          <section className="card">
-            <div className="row space-between">
-              <h3>Team Owner Profile</h3>
-              <div className="actions-row">
-                {settings.auctionDate ? (
-                  <button className="btn icon-btn" type="button" onClick={() => router.push("/auction")}>
-                    <FaGavel aria-hidden="true" />
-                    <span>Participate in Auction</span>
-                  </button>
-                ) : null}
+          <>
+            <section className="card">
+              <div className="row space-between">
+                <h3>Team Owner Profile</h3>
+                <div className="actions-row">
+                  {settings.auctionDate ? (
+                    <button className="btn icon-btn" type="button" onClick={() => router.push("/auction")}>
+                      <FaGavel aria-hidden="true" />
+                      <span>Participate in Auction</span>
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-            <form className="form-grid profile-form-grid" onSubmit={(event) => updateSelf(event, "team_owner")}>
-              <label>Owner Name<input name="ownerName" defaultValue={me.ownerName} required /></label>
-              <label>Team Name<input name="teamName" defaultValue={me.teamName} required /></label>
-              <label className="field-full">
-                          Logo Upload
-                <input
-                  name="logoFile"
-                  type="file"
-                  accept="image/*"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      setSelfTeamLogo(await fileToDataUrl(file));
-                    } catch (error) {
-                      setMessage(error.message);
-                    }
-                  }}
-                />
-              </label>
-              <div className="preview-card field-full">
-                <img className="preview-image" src={selfTeamLogo || me.logo} alt="Team logo" />
+              <form className="form-grid profile-form-grid" onSubmit={(event) => updateSelf(event, "team_owner")}>
+                <label>Owner Name<input name="ownerName" defaultValue={me.ownerName} required /></label>
+                <label>Team Name<input name="teamName" defaultValue={me.teamName} required /></label>
+                <label className="field-full">
+                            Logo Upload
+                  <input
+                    name="logoFile"
+                    type="file"
+                    accept="image/*"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setSelfTeamLogo(await fileToDataUrl(file));
+                      } catch (error) {
+                        setMessage(error.message);
+                      }
+                    }}
+                  />
+                </label>
+                <div className="preview-card field-full">
+                  <img className="preview-image" src={selfTeamLogo || me.logo} alt="Team logo" />
+                </div>
+                <label className="field-full">
+                  Jersey Design Upload
+                  <input
+                    name="jerseyDesignFile"
+                    type="file"
+                    accept="image/*"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setSelfTeamJerseyDesign(await fileToDataUrl(file));
+                      } catch (error) {
+                        setMessage(error.message);
+                      }
+                    }}
+                  />
+                </label>
+                <div className="preview-card field-full">
+                  <img className="preview-image" src={selfTeamJerseyDesign || me.jerseyDesign} alt="Jersey design" />
+                </div>
+                <label>Jersey Pattern<input name="jerseyPattern" defaultValue={me.jerseyPattern} required /></label>
+                <label>Owner Mobile<input name="ownerMobile" defaultValue={me.ownerMobile} required /></label>
+                <label>Password<PasswordField name="password" required /></label>
+                <button className="btn" type="submit">Update Team Profile</button>
+              </form>
+            </section>
+
+            <section className="card">
+              <div className="row space-between">
+                <h3 className="section-title">
+                  <FaUsers aria-hidden="true" />
+                  <span>{me.teamName} Squad</span>
+                </h3>
+                <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}>
+                  <FaDownload aria-hidden="true" />
+                  <span>Download Team Players</span>
+                </button>
               </div>
-              <label className="field-full">
-                Jersey Design Upload
-                <input
-                  name="jerseyDesignFile"
-                  type="file"
-                  accept="image/*"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      setSelfTeamJerseyDesign(await fileToDataUrl(file));
-                    } catch (error) {
-                      setMessage(error.message);
-                    }
-                  }}
-                />
-              </label>
-              <div className="preview-card field-full">
-                <img className="preview-image" src={selfTeamJerseyDesign || me.jerseyDesign} alt="Jersey design" />
-              </div>
-              <label>Jersey Pattern<input name="jerseyPattern" defaultValue={me.jerseyPattern} required /></label>
-              <label>Owner Mobile<input name="ownerMobile" defaultValue={me.ownerMobile} required /></label>
-              <label>Password<PasswordField name="password" required /></label>
-              <button className="btn" type="submit">Update Team Profile</button>
-            </form>
-          </section>
-        ) : null}
-        {currentUser.role === "team_owner" && settings.showTeamOwnerPlayerList ? (
-          <section className="card">
-            <div className="row space-between">
-              <h3 className="section-title">
-                <FaUsers aria-hidden="true" />
-                <span>Players List ({sortedPlayers.length})</span>
-              </h3>
-              <button className="btn ghost icon-btn" type="button" onClick={downloadPlayersCsv}>
-                <FaDownload aria-hidden="true" />
-                <span>Download Players List</span>
-              </button>
-            </div>
-            <div className="desktop-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Photo</th>
-                    <th>Name</th>
-                    <th>Village</th>
-                    <th>Mobile Number</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedPlayers.map((player) => (
-                    <tr key={player.id}>
-                      <td className="photo-cell">
-                        <ImageThumbWithPreview
-                          src={player.photo}
-                          alt={`${player.name} photo`}
-                          onPreview={openImagePreview}
-                        />
-                      </td>
-                      <td>{player.name}</td>
-                      <td>{player.village || "-"}</td>
-                      <td>{player.mobile || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mobile-cards">
-              {sortedPlayers.map((player) => (
-                <article className="card soft" key={player.id}>
-                  <p><strong>Photo:</strong> <ImageThumbWithPreview src={player.photo} alt={`${player.name} photo`} onPreview={openImagePreview} /></p>
-                  <p><strong>Name:</strong> {player.name}</p>
-                  <p><strong>Village:</strong> {player.village || "-"}</p>
-                  <p><strong>Mobile Number:</strong> {player.mobile || "-"}</p>
+              <p className="muted">
+                Budget: {formatPoints(teamSummary?.budget || me.auctionBudget || 100000)} | Spent: {formatPoints(teamSummary?.spentPoints || 0)} | Remaining: {formatPoints(teamSummary?.remainingPoints || 0)} | Players: {teamSummary?.playerCount || sortedPlayers.length}
+              </p>
+              <div className="mobile-cards">
+                <article className="card soft">
+                  <p><strong>Total Budget:</strong> {formatPoints(teamSummary?.budget || me.auctionBudget || 100000)}</p>
+                  <p><strong>Spent Points:</strong> {formatPoints(teamSummary?.spentPoints || 0)}</p>
+                  <p><strong>Remaining Points:</strong> {formatPoints(teamSummary?.remainingPoints || 0)}</p>
+                  <p><strong>Players:</strong> {teamSummary?.playerCount || sortedPlayers.length}</p>
                 </article>
-              ))}
-            </div>
-          </section>
+              </div>
+              <div className="desktop-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Photo</th>
+                      <th>Name</th>
+                      <th>Village</th>
+                      <th>Mobile Number</th>
+                      <th>Jersey Name</th>
+                      <th>Player Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedPlayers.length ? sortedPlayers.map((player) => (
+                      <tr key={player.id}>
+                        <td className="photo-cell">
+                          <ImageThumbWithPreview
+                            src={player.photo}
+                            alt={`${player.name} photo`}
+                            onPreview={openImagePreview}
+                          />
+                        </td>
+                        <td>{player.name}</td>
+                        <td>{player.village || "-"}</td>
+                        <td>{player.mobile || "-"}</td>
+                        <td>{player.jerseyName || "-"}</td>
+                        <td>{formatPoints(player.playerPoints)}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="6" className="muted">No players assigned to your team yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mobile-cards">
+                {sortedPlayers.length ? sortedPlayers.map((player) => (
+                  <article className="card soft" key={player.id}>
+                    <p><strong>Photo:</strong> <ImageThumbWithPreview src={player.photo} alt={`${player.name} photo`} onPreview={openImagePreview} /></p>
+                    <p><strong>Name:</strong> {player.name}</p>
+                    <p><strong>Village:</strong> {player.village || "-"}</p>
+                    <p><strong>Mobile Number:</strong> {player.mobile || "-"}</p>
+                    <p><strong>Jersey Name:</strong> {player.jerseyName || "-"}</p>
+                    <p><strong>Player Points:</strong> {formatPoints(player.playerPoints)}</p>
+                  </article>
+                )) : (
+                  <article className="card soft">
+                    <p>No players assigned to your team yet.</p>
+                  </article>
+                )}
+              </div>
+            </section>
+          </>
         ) : null}
       </div>
     </main>

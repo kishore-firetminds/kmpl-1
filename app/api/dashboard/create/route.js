@@ -95,6 +95,7 @@ export async function POST(request) {
         email,
         jerseyPattern,
         ownerMobile,
+        auctionBudget: 100000,
         password: hashPassword(password),
         feePaid: 5100,
         paymentRef: "ADMIN_CREATED",

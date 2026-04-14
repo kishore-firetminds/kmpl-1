@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "import:players": "node scripts/import-players.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",

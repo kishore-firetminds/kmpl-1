@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/server/auth";
 import { fromPlayerRow, fromSuperAdminRow, fromTeamOwnerRow } from "@/lib/server/models";
+import { calculateTeamSummary } from "@/lib/server/dashboard";
 import { loadAppSettings } from "@/lib/server/settings";
 import { selectRows } from "@/lib/server/supabase";
 
@@ -123,6 +124,9 @@ export async function GET(request) {
       "jersey_size",
       "jersey_name",
       "village",
+      "assigned_team_owner_id",
+      "assigned_team_name",
+      "player_points",
       "fee_paid",
       "payment_ref",
       "registered_at"
@@ -153,6 +157,7 @@ export async function GET(request) {
       "email",
       "jersey_pattern",
       "owner_mobile",
+      "auction_budget",
       "fee_paid",
       "payment_ref",
       "registered_at"
@@ -171,11 +176,23 @@ export async function GET(request) {
       "registered_at"
     ].join(",");
     const adminsSelect = ["id", "person_id", "role", "name", "email", "created_at"].join(",");
-    const teamOwnerVisiblePlayersSelect = ["id", "name", "photo", "mobile", "village", "registered_at"].join(",");
+    const teamOwnerPlayersSelect = [
+      "id",
+      "name",
+      "photo",
+      "mobile",
+      "village",
+      "jersey_name",
+      "assigned_team_owner_id",
+      "assigned_team_name",
+      "player_points",
+      "registered_at"
+    ].join(",");
 
     let players = [];
     let teamOwners = [];
     let superAdmins = [];
+    let teamSummary = null;
 
     const pagination = {
       players: { offset: playersOffset, limit: playersLimit, hasMore: false },
@@ -248,14 +265,17 @@ export async function GET(request) {
       });
       teamOwners = ownerRows.map(fromTeamOwnerRow);
 
-      if (settings.showTeamOwnerPlayerList && includesOnly(only, "players")) {
+      if (includesOnly(only, "players")) {
         const rows = await selectRowsResilient({
           table: "players",
-          select: teamOwnerVisiblePlayersSelect,
-          fallbackSelect: "id,name,mobile,village,registered_at",
+          select: teamOwnerPlayersSelect,
+          fallbackSelect: "id,name,photo,mobile,village,jersey_name,registered_at",
           order: "registered_at.desc",
           limit: MAX_PLAYERS_LIMIT,
-          offset: 0
+          offset: 0,
+          where: {
+            assigned_team_owner_id: `eq.${currentUser.id}`
+          }
         });
         players = rows.map((row) => ({
           id: row.id,
@@ -263,11 +283,19 @@ export async function GET(request) {
           photo: row.photo,
           mobile: row.mobile,
           village: row.village,
+          jerseyName: row.jersey_name,
+          assignedTeamOwnerId: row.assigned_team_owner_id,
+          assignedTeamName: row.assigned_team_name,
+          playerPoints: Number(row.player_points || 0),
           registeredAt: row.registered_at
         }));
         pagination.players = { offset: players.length, limit: players.length || playersLimit, hasMore: false };
       } else {
         pagination.players = { offset: 0, limit: playersLimit, hasMore: false };
+      }
+
+      if (teamOwners[0]) {
+        teamSummary = calculateTeamSummary(teamOwners[0], players);
       }
     }
 
@@ -280,7 +308,7 @@ export async function GET(request) {
       me = superAdmins.find((item) => item.id === currentUser.id) || null;
     }
 
-    return NextResponse.json({ currentUser, players, teamOwners, superAdmins, me, settings, pagination });
+    return NextResponse.json({ currentUser, players, teamOwners, superAdmins, me, settings, pagination, teamSummary });
   } catch (error) {
     const message = String(error?.message || "Unable to load dashboard.");
     const isTimeout = message.toLowerCase().includes("statement timeout");
